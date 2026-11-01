@@ -11,6 +11,7 @@ from pneumoshift.evaluation.thresholds import (
     evaluate_threshold_transfer,
     compute_score_distribution_shift,
 )
+from pneumoshift.evaluation.ablation import compare_single_vs_multitask
 from pneumoshift.evaluation.benchmarks import (
     LITERATURE_BENCHMARKS,
     compare_against_benchmarks,
@@ -43,5 +44,6 @@ __all__ = [
     "evaluate_subgroups",
     "LITERATURE_BENCHMARKS",
     "compare_against_benchmarks",
+    "compare_single_vs_multitask",
 ]
 
