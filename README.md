@@ -98,7 +98,7 @@ pytest tests/test_smoke.py
 ## 4. Phase-by-Phase Roadmap
 
 - [x] **P0 Setup**: Repository scaffolding, modular structure, configs, CI tests, and synthetic smoke test pipeline.
-- [ ] **P1 Data**: Frontal filtering, label harmonization (8 shared classes), patient-partitioned splits with zero overlap, and distribution audit.
+- [x] **P1 Data**: Frontal filtering, label harmonization (8 shared classes), patient-partitioned splits with zero overlap, and distribution audit.
 - [ ] **P2 Training**: In-domain DenseNet121 baseline models on NIH ChestX-ray14 and Stanford CheXpert.
 - [ ] **P3 Cross-Dataset Evaluation**: Cross-domain generalization gap, ECE/MCE calibration, temperature scaling, oracle recalibration, threshold transfer, and penultimate feature probes.
 - [ ] **P4 Architecture & Uncertainty Ablation**: EfficientNet-B0 evaluation, multi-seed replication (seeds 42, 1337, 2024), and CheXpert uncertainty ablations (U-Zeros vs U-Ones vs U-Ignore).
