@@ -1,0 +1,73 @@
+# Experiment Configuration: Pneumonia-Only Single-Label Ablation on Stanford CheXpert (U-Zeros)
+experiment_name: "pneumonia_only_chexpert"
+project_name: "PneumoShift"
+seed: 42
+seeds: [42, 1337, 2024]
+
+data:
+  dataset_name: "chexpert"
+  data_dir: "data/chexpert/CheXpert-v1.0-small"
+  images_dir: "data/chexpert/CheXpert-v1.0-small"
+  splits_dir: "data/splits/chexpert"
+  image_size: 224
+  channels: 3
+  batch_size: 32
+  num_workers: 4
+  use_frontal_only: true
+  drop_lateral: true
+  cache_preprocessed: false
+  uncertainty_policy: "u_zeros"
+  shared_classes:
+    - "Pneumonia"
+  headline_target: "Pneumonia"
+  headline_only: true # Single-label ablation mode
+
+model:
+  architecture: "densenet121"
+  pretrained: true
+  num_classes: 1 # Single binary output for pneumonia
+  dropout: 0.2
+  pooling: "avg"
+  target_layer: "features.norm5"
+
+train:
+  epochs: 20
+  learning_rate: 0.0001
+  weight_decay: 0.00001
+  optimizer: "adamw"
+  lr_scheduler: "plateau"
+  lr_patience: 2
+  lr_factor: 0.5
+  early_stopping_patience: 6
+  mixed_precision: true
+  gradient_accumulation_steps: 1
+  clip_grad_norm: 1.0
+  pos_weight: "inverse_freq"
+  two_stage_finetune: false
+  freeze_epochs: 3
+  backbone_lr: 0.00001
+  checkpoint_dir: "results/runs/pneumonia_only_chexpert/checkpoints"
+  run_output_dir: "results/runs/pneumonia_only_chexpert"
+  save_best_metric: "val_pneumonia_auroc"
+  save_headline_metric: "val_pneumonia_auroc"
+
+eval:
+  batch_size: 64
+  num_workers: 4
+  bootstrap_samples: 1000
+  confidence_level: 0.95
+  ece_bins: 15
+  ece_bin_strategy: "uniform"
+  threshold_selection_metric: "youden"
+  output_dir: "results/tables/pneumonia_only_chexpert"
+
+xai:
+  method: "gradcam"
+  target_layer: "features.norm5"
+  deletion_steps: 10
+  insertion_steps: 10
+  perturbation_rotation: 10
+  perturbation_brightness: 0.1
+  sanity_check_layers: ["classifier", "features.denseblock4", "all"]
+  output_dir: "results/figures/pneumonia_only_chexpert/xai"
+
