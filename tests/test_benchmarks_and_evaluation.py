@@ -147,3 +147,87 @@ class TestEvaluationEngine:
         assert "ece" in pneu
         assert "mce" in pneu
 
+    def test_chexpert_uncertainty_modes_in_evaluation(self):
+        # 10 samples with uncertain (-1.0) ground truth
+        targets = torch.tensor([
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [-1.0, 0.0],  # uncertain sample
+            [1.0, 1.0],
+            [0.0, 0.0],
+            [-1.0, -1.0], # uncertain sample
+        ])
+        num_samples = len(targets)
+        images = torch.randn(num_samples, 4)
+
+        dataset = TensorDataset(images, targets)
+        loader = DataLoader(
+            dataset,
+            batch_size=num_samples,
+            collate_fn=lambda b: {
+                "image": torch.stack([x[0] for x in b]),
+                "target": torch.stack([x[1] for x in b]),
+            },
+        )
+        df = pd.DataFrame({
+            "image_id": [f"img_{i:02d}.png" for i in range(num_samples)],
+            "patient_id": [f"p_{i:02d}" for i in range(num_samples)],
+        })
+        model = DummyEvalModel(in_features=4, num_classes=2)
+        device = torch.device("cpu")
+
+        # Mode 1: uncertain_as_negative
+        res_neg = evaluate_split(
+            model=model,
+            loader=loader,
+            df=df,
+            label_cols=["Pneumonia", "Atelectasis"],
+            device=device,
+            compute_bootstrap=False,
+            uncertainty_mode="uncertain_as_negative",
+        )
+        assert res_neg["uncertainty_mode"] == "uncertain_as_negative"
+        assert not np.isnan(res_neg["per_class"]["Pneumonia"]["auroc"])
+
+        # Mode 2: uncertain_excluded
+        res_exc = evaluate_split(
+            model=model,
+            loader=loader,
+            df=df,
+            label_cols=["Pneumonia", "Atelectasis"],
+            device=device,
+            compute_bootstrap=False,
+            uncertainty_mode="uncertain_excluded",
+        )
+        assert res_exc["uncertainty_mode"] == "uncertain_excluded"
+        assert not np.isnan(res_exc["per_class"]["Pneumonia"]["auroc"])
+
+    def test_chexpert_official_val_benchmark_comparison(self):
+        # Comparison with Irvin et al. (2019) official validation targets
+        metrics = {
+            "auroc_atelectasis": 0.815,
+            "auroc_cardiomegaly": 0.845,
+            "auroc_consolidation": 0.928,
+            "auroc_edema": 0.930,
+            "auroc_pleural_effusion": 0.933,
+            "auroc_pneumonia": 0.760,
+        }
+        res = compare_against_benchmarks(metrics, benchmark_name="irvin_2019_chexpert")
+        assert res["comparisons"]["Atelectasis"]["benchmark"] == 0.811
+        assert res["comparisons"]["Consolidation"]["benchmark"] == 0.932
+        assert res["comparisons"]["Pleural Effusion"]["benchmark"] == 0.931
+        assert res["comparisons"]["Atelectasis"]["status"] == "Aligned"
+        assert res["headline_sanity_passed"] is True
+
+    def test_chexpert_test_benchmark_comparison(self):
+        # Comparison with Tayebi Arasteh et al. (2023) CheXpert targets
+        metrics = {
+            "auroc_pneumonia": 0.765,
+            "auroc_atelectasis": 0.685,
+            "auroc_cardiomegaly": 0.870,
+        }
+        res = compare_against_benchmarks(metrics, benchmark_name="arasteh_2023_chexpert")
+        assert res["comparisons"]["Pneumonia"]["benchmark"] == 0.764
+        assert res["comparisons"]["Pneumonia"]["status"] == "Aligned"
+        assert res["headline_sanity_passed"] is True
+

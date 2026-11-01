@@ -369,6 +369,7 @@ def create_synthetic_dataset(
         "val": df[df["patient_id"].isin(val_p)].copy(),
         "test": df[df["patient_id"].isin(test_p)].copy(),
         "target_cal": df[df["patient_id"].isin(cal_p)].copy(),
+        "official_val": df[df["patient_id"].isin(val_p)].copy(),
     }
 
     # Verify zero patient leakage between train, val, and test
