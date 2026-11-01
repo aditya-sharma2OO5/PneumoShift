@@ -10,7 +10,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from pneumoshift.data.datasets import ChestXrayDataset
-from pneumoshift.data.harmonize_labels import HEADLINE_CLASS, SHARED_CLASSES
+from pneumoshift.data.harmonize_labels import HEADLINE_CLASS, SHARED_CLASSES, get_evaluation_targets
 from pneumoshift.data.splits import create_synthetic_dataset
 from pneumoshift.data.transforms import get_transforms
 from pneumoshift.evaluation.benchmarks import compare_against_benchmarks
@@ -74,6 +74,7 @@ def evaluate_split(
     compute_bootstrap: bool = True,
     n_resamples: int = 1000,
     seed: int = 42,
+    uncertainty_mode: str = "uncertain_as_negative",
 ) -> Dict[str, Any]:
     """Computes comprehensive evaluation metrics including bootstrap CIs."""
     _, probs, targets, _ = extract_features_and_predictions(model, loader, device)
@@ -83,6 +84,7 @@ def evaluate_split(
     results: Dict[str, Any] = {
         "num_samples": len(df),
         "num_patients": int(len(np.unique(patient_ids))),
+        "uncertainty_mode": uncertainty_mode,
         "per_class": {},
     }
 
@@ -91,7 +93,8 @@ def evaluate_split(
     summary_metrics: Dict[str, float] = {}
 
     for idx, col in enumerate(label_cols):
-        y_true = targets[:, idx]
+        raw_y_true = targets[:, idx]
+        y_true = get_evaluation_targets(raw_y_true, mode=uncertainty_mode)
         y_pred = probs[:, idx]
 
         disc = compute_discrimination_metrics(y_true, y_pred)
@@ -165,7 +168,8 @@ def main() -> None:
     parser.add_argument("--split", default="test", choices=["train", "val", "test", "target_cal", "official_val"], help="Dataset split to evaluate")
     parser.add_argument("--smoke_test", action="store_true", help="Run in synthetic dry-run smoke test mode")
     parser.add_argument("--output_dir", default=None, help="Directory to save evaluation tables and reports")
-    parser.add_argument("--benchmark", default=None, help="Literature benchmark override (e.g. pan_2019_nih, irvin_2019_chexpert)")
+    parser.add_argument("--benchmark", default=None, help="Literature benchmark override (e.g. pan_2019_nih, irvin_2019_chexpert, arasteh_2023_chexpert)")
+    parser.add_argument("--uncertainty_mode", default=None, choices=["uncertain_as_negative", "uncertain_excluded"], help="Uncertainty evaluation policy (default from config or uncertain_as_negative)")
     parser.add_argument("--no_bootstrap", action="store_true", help="Disable computation of bootstrap confidence intervals")
     parser.add_argument("--n_resamples", type=int, default=1000, help="Number of bootstrap resamples (default 1000)")
     args = parser.parse_args()
@@ -227,58 +231,91 @@ def main() -> None:
 
     model.to(device)
 
-    # Execute evaluation
-    results = evaluate_split(
-        model=model,
-        loader=loader,
-        df=df,
-        label_cols=label_cols,
-        device=device,
-        compute_bootstrap=not args.no_bootstrap and not args.smoke_test,
-        n_resamples=args.n_resamples,
-        seed=cfg.get("seed", 42),
-    )
+    # Resolve uncertainty evaluation modes
+    default_mode = args.uncertainty_mode or "uncertain_as_negative"
+    modes_to_eval = [default_mode]
+    if args.uncertainty_mode is None and "eval_uncertainty_modes" in cfg.get("eval", {}):
+        modes_to_eval = cfg.get("eval", {}).get("eval_uncertainty_modes", [default_mode])
 
-    # Save detailed JSON metrics
-    json_path = out_dir / f"eval_metrics_{args.split}.json"
-    save_json(results, json_path)
-    logger.info("Saved evaluation JSON to %s", json_path)
+    # Deduce benchmark reference
+    if args.benchmark:
+        bench_name = args.benchmark
+    elif "nih" in ds_name:
+        bench_name = "pan_2019_nih"
+    elif "chexpert" in ds_name:
+        if args.split == "official_val":
+            bench_name = "irvin_2019_chexpert"
+        else:
+            bench_name = "arasteh_2023_chexpert"
+    else:
+        bench_name = "pan_2019_nih"
 
-    # Save summary CSV table
-    csv_path = out_dir / f"eval_metrics_{args.split}.csv"
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(["finding", "auroc", "auroc_ci_lower", "auroc_ci_upper", "auprc", "auprc_ci_lower", "auprc_ci_upper", "sens_at_90_spec", "spec_at_90_sens", "prevalence", "ece"])
-        for col, m in results["per_class"].items():
-            auc_ci = m.get("auroc_ci_95", ["", ""])
-            prc_ci = m.get("auprc_ci_95", ["", ""])
-            writer.writerow([
-                col,
-                f"{m['auroc']:.4f}" if not np.isnan(m['auroc']) else "",
-                f"{auc_ci[0]:.4f}" if isinstance(auc_ci[0], float) else "",
-                f"{auc_ci[1]:.4f}" if isinstance(auc_ci[1], float) else "",
-                f"{m['auprc']:.4f}" if not np.isnan(m['auprc']) else "",
-                f"{prc_ci[0]:.4f}" if isinstance(prc_ci[0], float) else "",
-                f"{prc_ci[1]:.4f}" if isinstance(prc_ci[1], float) else "",
-                f"{m.get('sens_at_90_spec', 0.0):.4f}",
-                f"{m.get('spec_at_90_sens', 0.0):.4f}",
-                f"{m.get('prevalence', 0.0):.4f}",
-                f"{m.get('ece', 0.0):.4f}",
-            ])
-    logger.info("Saved evaluation CSV table to %s", csv_path)
-
-    # Literature benchmark comparison
-    bench_name = args.benchmark or ("pan_2019_nih" if "nih" in ds_name else "irvin_2019_chexpert")
-    try:
-        bench_comp = compare_against_benchmarks(
-            evaluated_metrics=results["summary_flat"],
-            benchmark_name=bench_name,
-            headline_class=HEADLINE_CLASS,
+    for mode in modes_to_eval:
+        logger.info("Executing evaluation under uncertainty mode: %s", mode)
+        results = evaluate_split(
+            model=model,
+            loader=loader,
+            df=df,
+            label_cols=label_cols,
+            device=device,
+            compute_bootstrap=not args.no_bootstrap and not args.smoke_test,
+            n_resamples=args.n_resamples,
+            seed=cfg.get("seed", 42),
+            uncertainty_mode=mode,
         )
-        save_json(bench_comp, out_dir / f"benchmark_comparison_{args.split}.json")
-        with open(out_dir / f"benchmark_comparison_{args.split}.md", "w", encoding="utf-8") as f:
-            f.write(f"# Benchmark Comparison: {bench_name}\n\n")
-            f.write(bench_comp["table_markdown"] + "\n\n")
+
+        mode_suffix = f"_{mode}" if len(modes_to_eval) > 1 else ""
+
+        # Save detailed JSON metrics
+        json_path = out_dir / f"eval_metrics_{args.split}{mode_suffix}.json"
+        save_json(results, json_path)
+        logger.info("Saved evaluation JSON to %s", json_path)
+
+        # Save summary CSV table
+        csv_path = out_dir / f"eval_metrics_{args.split}{mode_suffix}.csv"
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["finding", "auroc", "auroc_ci_lower", "auroc_ci_upper", "auprc", "auprc_ci_lower", "auprc_ci_upper", "sens_at_90_spec", "spec_at_90_sens", "prevalence", "ece"])
+            for col, m in results["per_class"].items():
+                auc_ci = m.get("auroc_ci_95", ["", ""])
+                prc_ci = m.get("auprc_ci_95", ["", ""])
+                writer.writerow([
+                    col,
+                    f"{m['auroc']:.4f}" if not np.isnan(m['auroc']) else "",
+                    f"{auc_ci[0]:.4f}" if isinstance(auc_ci[0], float) else "",
+                    f"{auc_ci[1]:.4f}" if isinstance(auc_ci[1], float) else "",
+                    f"{m['auprc']:.4f}" if not np.isnan(m['auprc']) else "",
+                    f"{prc_ci[0]:.4f}" if isinstance(prc_ci[0], float) else "",
+                    f"{prc_ci[1]:.4f}" if isinstance(prc_ci[1], float) else "",
+                    f"{m.get('sens_at_90_spec', 0.0):.4f}",
+                    f"{m.get('spec_at_90_sens', 0.0):.4f}",
+                    f"{m.get('prevalence', 0.0):.4f}",
+                    f"{m.get('ece', 0.0):.4f}",
+                ])
+        logger.info("Saved evaluation CSV table to %s", csv_path)
+
+        # Literature benchmark comparison
+        try:
+            bench_comp = compare_against_benchmarks(
+                evaluated_metrics=results["summary_flat"],
+                benchmark_name=bench_name,
+                headline_class=HEADLINE_CLASS,
+            )
+            save_json(bench_comp, out_dir / f"benchmark_comparison_{args.split}{mode_suffix}.json")
+            with open(out_dir / f"benchmark_comparison_{args.split}{mode_suffix}.md", "w", encoding="utf-8") as f:
+                f.write(f"# Benchmark Comparison: {bench_name} ({mode})\n\n")
+                f.write(bench_comp["table_markdown"] + "\n\n")
+                f.write(f"**Sanity Status**: {bench_comp['headline_sanity_message']}\n")
+
+            print("\n" + "=" * 70)
+            print(f"BENCHMARK COMPARISON ({bench_name.upper()} vs EVALUATED - Mode: {mode})")
+            print("=" * 70)
+            print(bench_comp["table_markdown"])
+            print("-" * 70)
+            print(f"Sanity Check: {bench_comp['headline_sanity_message']}")
+            print("=" * 70 + "\n")
+        except Exception as exc:
+            logger.warning("Could not run benchmark comparison: %s", exc)
             f.write(f"**Sanity Status**: {bench_comp['headline_sanity_message']}\n")
 
         print("\n" + "=" * 70)

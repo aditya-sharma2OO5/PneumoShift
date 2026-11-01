@@ -174,7 +174,7 @@ def main() -> None:
             save_json(test_metrics, run_out_dir / f"test_metrics_{arch}_{seed}.json")
             logger.info("Test Evaluation: Macro AUROC: %.4f | Pneumonia AUROC: %.4f", test_metrics.get("val_macro_auroc", 0.0), test_metrics.get("val_pneumonia_auroc", 0.0))
 
-            bench_name = "pan_2019_nih" if "nih" in ds_name else "irvin_2019_chexpert"
+            bench_name = "pan_2019_nih" if "nih" in ds_name else "arasteh_2023_chexpert"
             try:
                 bench_comp = compare_against_benchmarks(
                     evaluated_metrics=test_metrics,
@@ -189,6 +189,37 @@ def main() -> None:
                 print("=" * 70 + "\n")
             except Exception as exc:
                 logger.warning("Could not run benchmark comparison: %s", exc)
+
+            # In CheXpert, additionally evaluate on official 200-study validation benchmark if available
+            if "chexpert" in ds_name:
+                off_val_csv = resolve_split_path(splits_dir, ds_name, "official_val")
+                if not off_val_csv.is_file() and args.smoke_test:
+                    off_val_csv = synth_dir / "splits" / "synthetic_official_val.csv"
+
+                if off_val_csv.is_file():
+                    logger.info("Evaluating on official CheXpert validation benchmark: %s", off_val_csv)
+                    off_df = pd.read_csv(off_val_csv)
+                    off_ds = ChestXrayDataset(off_df, images_dir=img_dir, transform=test_trans, headline_only=headline_only, cache_dir=cache_dir)
+                    off_loader = DataLoader(off_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+                    off_metrics = trainer.evaluate(off_loader)
+                    save_json(off_metrics, run_out_dir / f"official_val_metrics_{arch}_{seed}.json")
+                    logger.info("Official Val Evaluation: Macro AUROC: %.4f | Pneumonia AUROC: %.4f", off_metrics.get("val_macro_auroc", 0.0), off_metrics.get("val_pneumonia_auroc", 0.0))
+
+                    try:
+                        off_bench = compare_against_benchmarks(
+                            evaluated_metrics=off_metrics,
+                            benchmark_name="irvin_2019_chexpert",
+                            headline_class=HEADLINE_CLASS,
+                        )
+                        save_json(off_bench, run_out_dir / f"official_val_benchmark_{arch}_{seed}.json")
+                        print("\n" + "=" * 70)
+                        print("CHEXPERT OFFICIAL VALIDATION BENCHMARK COMPARISON (IRVIN ET AL. 2019)")
+                        print("=" * 70)
+                        print(off_bench["table_markdown"])
+                        print("=" * 70 + "\n")
+                    except Exception as exc:
+                        logger.warning("Could not run official validation benchmark comparison: %s", exc)
         else:
             logger.warning("Test split CSV %s not found. Skipping test evaluation.", test_csv)
 
