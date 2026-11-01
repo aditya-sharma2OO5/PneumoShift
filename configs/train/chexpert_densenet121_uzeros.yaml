@@ -53,6 +53,7 @@ train:
   pos_weight: "inverse_freq"
   two_stage_finetune: false
   freeze_epochs: 3
+  backbone_lr: 0.00001 # 1e-5, used only when two_stage_finetune: true
   checkpoint_dir: "results/runs/chexpert_densenet121_uzeros/checkpoints"
   run_output_dir: "results/runs/chexpert_densenet121_uzeros"
   save_best_metric: "val_macro_auroc"
