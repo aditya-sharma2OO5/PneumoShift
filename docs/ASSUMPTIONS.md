@@ -42,7 +42,7 @@ This document records all baseline assumptions, design choices, and operational 
   - Comparison backbone: `EfficientNet-B0` (feature dim 1280, optional swappable B3).
   - Pretraining: ImageNet-1K / ImageNet-21K transfer learning.
 - **Loss Function**: Multi-label Binary Cross-Entropy with pos_weight calculated from the inverse class frequency on the training set.
-- **Optimization**: AdamW / Adam with initial learning rate $1 \times 10^{-4}$, weight decay $1 \times 10^{-5}$, gradient clipping at max norm 1.0, and ReduceLROnPlateau / CosineAnnealingLR.
+- **Optimization**: AdamW / Adam with initial learning rate $1 \times 10^{-4}$, weight decay $1 \times 10^{-5}$, gradient clipping at max norm 1.0, and ReduceLROnPlateau / CosineAnnealingLR (matching literature protocols in Pan et al., Irvin et al., and Tayebi Arasteh et al.).
 - **Multi-Seed Replication**: Experiments are executed across a minimum of 3 fixed seeds (default: 42, 1337, 2024) to report mean $\pm$ standard deviation.
 
 ---

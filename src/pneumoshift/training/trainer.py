@@ -74,10 +74,16 @@ class Trainer:
 
             if (step + 1) % grad_accum_steps == 0 or (step + 1) == len(self.train_loader):
                 if clip_norm > 0:
-                    self.scaler.unscale_(self.optimizer)
+                    if self.scaler.is_enabled():
+                        self.scaler.unscale_(self.optimizer)
                     nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=clip_norm)
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
+
+                if self.scaler.is_enabled():
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    self.optimizer.step()
+
                 self.optimizer.zero_grad()
 
             total_loss += loss.item() * grad_accum_steps
