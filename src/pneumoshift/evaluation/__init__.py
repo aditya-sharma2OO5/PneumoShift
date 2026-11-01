@@ -11,6 +11,10 @@ from pneumoshift.evaluation.thresholds import (
     evaluate_threshold_transfer,
     compute_score_distribution_shift,
 )
+from pneumoshift.evaluation.benchmarks import (
+    LITERATURE_BENCHMARKS,
+    compare_against_benchmarks,
+)
 from pneumoshift.evaluation.bootstrap import (
     patient_bootstrap_ci,
     paired_bootstrap_auroc_diff,
@@ -37,5 +41,7 @@ __all__ = [
     "train_domain_classifier_probe",
     "compute_feature_mmd",
     "evaluate_subgroups",
+    "LITERATURE_BENCHMARKS",
+    "compare_against_benchmarks",
 ]
 
