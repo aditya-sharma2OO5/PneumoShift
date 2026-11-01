@@ -1,0 +1,9 @@
+architecture: "efficientnet_b0"
+pretrained: true
+num_classes: 8
+dropout: 0.2
+pooling: "avg"
+target_layer: "conv_head"
+feature_dim: 1280
+freeze_layers: ["conv_stem", "bn1"]
+

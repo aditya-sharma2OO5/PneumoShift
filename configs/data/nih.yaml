@@ -1,0 +1,25 @@
+dataset_name: "nih"
+data_dir: "data/nih_cxr"
+images_dir: "data/nih_cxr/images"
+metadata_csv: "data/nih_cxr/Data_Entry_2017_v2020.csv"
+train_val_list: "data/nih_cxr/train_val_list.txt"
+test_list: "data/nih_cxr/test_list.txt"
+bbox_csv: "data/nih_cxr/BBox_List_2017.csv"
+splits_dir: "data/splits/nih"
+uncertainty_policy: "binary" # NIH has binary labels derived from NLP
+use_frontal_only: true
+image_size: 224
+channels: 3
+batch_size: 32
+num_workers: 4
+headline_target: "Pneumonia"
+shared_classes:
+  - "Atelectasis"
+  - "Cardiomegaly"
+  - "Consolidation"
+  - "Edema"
+  - "Pleural Effusion"
+  - "Pneumonia"
+  - "Pneumothorax"
+  - "No Finding"
+

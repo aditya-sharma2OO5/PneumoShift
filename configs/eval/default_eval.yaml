@@ -1,0 +1,13 @@
+batch_size: 64
+num_workers: 4
+bootstrap_samples: 1000
+confidence_level: 0.95
+ece_bins: 15
+ece_bin_strategy: "uniform"
+threshold_selection_metric: "youden"
+fixed_sensitivity_target: 0.90
+fixed_specificity_target: 0.90
+run_oracle_recalibration: true
+target_calibration_ratio: 0.10
+output_dir: "results/tables"
+

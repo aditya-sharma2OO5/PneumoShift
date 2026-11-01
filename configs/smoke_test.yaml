@@ -1,0 +1,70 @@
+# Smoke Test Configuration for Fast CI / CPU Dry-Run
+project_name: "PneumoShift-SmokeTest"
+seed: 42
+seeds: [42]
+
+data:
+  dataset_name: "synthetic"
+  data_dir: "data/synthetic"
+  splits_dir: "data/synthetic/splits"
+  image_size: 64
+  channels: 3
+  batch_size: 4
+  num_workers: 0
+  uncertainty_policy: "u_zeros"
+  shared_classes:
+    - "Atelectasis"
+    - "Cardiomegaly"
+    - "Consolidation"
+    - "Edema"
+    - "Pleural Effusion"
+    - "Pneumonia"
+    - "Pneumothorax"
+    - "No Finding"
+  headline_target: "Pneumonia"
+  use_frontal_only: true
+  cache_preprocessed: false
+  num_synthetic_samples: 30
+
+model:
+  architecture: "densenet121"
+  pretrained: false
+  num_classes: 8
+  dropout: 0.0
+  pooling: "avg"
+
+train:
+  epochs: 1
+  learning_rate: 0.001
+  weight_decay: 0.0
+  optimizer: "adam"
+  lr_scheduler: "plateau"
+  lr_patience: 1
+  lr_factor: 0.5
+  early_stopping_patience: 2
+  mixed_precision: false
+  gradient_accumulation_steps: 1
+  clip_grad_norm: 1.0
+  pos_weight: "none"
+  two_stage_finetune: false
+  freeze_epochs: 0
+
+eval:
+  batch_size: 4
+  num_workers: 0
+  bootstrap_samples: 10
+  confidence_level: 0.95
+  ece_bins: 5
+  ece_bin_strategy: "uniform"
+  threshold_selection_metric: "youden"
+  run_oracle_recalibration: true
+
+xai:
+  method: "gradcam"
+  target_layer: "features.norm5"
+  deletion_steps: 3
+  insertion_steps: 3
+  perturbation_rotation: 5
+  perturbation_brightness: 0.05
+  sanity_check_layers: ["classifier"]
+

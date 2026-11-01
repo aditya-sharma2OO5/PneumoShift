@@ -1,0 +1,23 @@
+dataset_name: "chexpert"
+data_dir: "data/chexpert/CheXpert-v1.0-small"
+metadata_train_csv: "data/chexpert/CheXpert-v1.0-small/train.csv"
+metadata_valid_csv: "data/chexpert/CheXpert-v1.0-small/valid.csv"
+splits_dir: "data/splits/chexpert"
+uncertainty_policy: "u_zeros" # primary: u_zeros, ablations: u_ones, u_ignore
+use_frontal_only: true
+drop_lateral: true
+image_size: 224
+channels: 3
+batch_size: 32
+num_workers: 4
+headline_target: "Pneumonia"
+shared_classes:
+  - "Atelectasis"
+  - "Cardiomegaly"
+  - "Consolidation"
+  - "Edema"
+  - "Pleural Effusion"
+  - "Pneumonia"
+  - "Pneumothorax"
+  - "No Finding"
+

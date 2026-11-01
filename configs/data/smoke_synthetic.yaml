@@ -1,0 +1,23 @@
+dataset_name: "synthetic"
+data_dir: "data/synthetic"
+images_dir: "data/synthetic/images"
+metadata_csv: "data/synthetic/metadata.csv"
+splits_dir: "data/synthetic/splits"
+uncertainty_policy: "u_zeros"
+use_frontal_only: true
+image_size: 64
+channels: 3
+batch_size: 4
+num_workers: 0
+headline_target: "Pneumonia"
+num_synthetic_samples: 30
+shared_classes:
+  - "Atelectasis"
+  - "Cardiomegaly"
+  - "Consolidation"
+  - "Edema"
+  - "Pleural Effusion"
+  - "Pneumonia"
+  - "Pneumothorax"
+  - "No Finding"
+
