@@ -10,6 +10,7 @@ from pneumoshift.data.datasets import ChestXrayDataset
 from pneumoshift.data.harmonize_labels import HEADLINE_CLASS, SHARED_CLASSES
 from pneumoshift.data.splits import create_synthetic_dataset
 from pneumoshift.data.transforms import get_transforms
+from pneumoshift.evaluation.benchmarks import compare_against_benchmarks
 from pneumoshift.models.factory import build_model
 from pneumoshift.training.losses import MaskedBCEWithLogitsLoss, compute_class_weights
 from pneumoshift.training.trainer import Trainer
@@ -38,6 +39,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=None, help="Random seed override")
     parser.add_argument("--architecture", default=None, help="Model architecture override")
     parser.add_argument("--epochs", type=int, default=None, help="Training epochs override")
+    parser.add_argument("--eval_test", action="store_true", help="Evaluate best checkpoint on test set after training")
     args = parser.parse_args()
 
     config_path = "configs/smoke_test.yaml" if args.smoke_test else args.config
@@ -146,6 +148,49 @@ def main() -> None:
     run_out_dir.mkdir(parents=True, exist_ok=True)
     save_json(history, run_out_dir / f"history_{arch}_{seed}.json")
     logger.info("Training complete. Results saved to %s", run_out_dir)
+
+    if args.eval_test:
+        logger.info("Evaluating best model checkpoint on test set...")
+        best_ckpt_path = trainer.checkpoint_cb.checkpoint_dir / "checkpoint_best.pt"
+        if best_ckpt_path.is_file():
+            ckpt = torch.load(best_ckpt_path, map_location=trainer.device)
+            model.load_state_dict(ckpt["model_state_dict"])
+            logger.info("Loaded best model checkpoint from %s", best_ckpt_path)
+
+        if args.smoke_test or cfg.get("data", {}).get("dataset_name") == "synthetic":
+            test_csv = synth_dir / "splits" / "synthetic_test.csv"
+        else:
+            test_csv = resolve_split_path(splits_dir, ds_name, "test")
+            if not test_csv.is_file():
+                test_csv = synth_dir / "splits" / "synthetic_test.csv"
+
+        if test_csv.is_file():
+            test_df = pd.read_csv(test_csv)
+            test_trans = get_transforms(split="test", image_size=img_size)
+            test_ds = ChestXrayDataset(test_df, images_dir=img_dir, transform=test_trans, headline_only=headline_only, cache_dir=cache_dir)
+            test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+            test_metrics = trainer.evaluate(test_loader)
+            save_json(test_metrics, run_out_dir / f"test_metrics_{arch}_{seed}.json")
+            logger.info("Test Evaluation: Macro AUROC: %.4f | Pneumonia AUROC: %.4f", test_metrics.get("val_macro_auroc", 0.0), test_metrics.get("val_pneumonia_auroc", 0.0))
+
+            bench_name = "pan_2019_nih" if "nih" in ds_name else "irvin_2019_chexpert"
+            try:
+                bench_comp = compare_against_benchmarks(
+                    evaluated_metrics=test_metrics,
+                    benchmark_name=bench_name,
+                    headline_class=HEADLINE_CLASS,
+                )
+                save_json(bench_comp, run_out_dir / f"test_benchmark_{arch}_{seed}.json")
+                print("\n" + "=" * 70)
+                print(f"TEST IN-DOMAIN BENCHMARK COMPARISON ({bench_name.upper()})")
+                print("=" * 70)
+                print(bench_comp["table_markdown"])
+                print("=" * 70 + "\n")
+            except Exception as exc:
+                logger.warning("Could not run benchmark comparison: %s", exc)
+        else:
+            logger.warning("Test split CSV %s not found. Skipping test evaluation.", test_csv)
 
 
 if __name__ == "__main__":
