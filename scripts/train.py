@@ -106,10 +106,25 @@ def main() -> None:
     lr = float(cfg.get("train", {}).get("learning_rate", 1e-4))
     wd = float(cfg.get("train", {}).get("weight_decay", 1e-5))
     opt_type = cfg.get("train", {}).get("optimizer", "adamw").lower()
-    if opt_type == "adam":
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
+    two_stage = cfg.get("train", {}).get("two_stage_finetune", False)
+
+    # When two-stage fine-tuning is enabled, register backbone and head as
+    # separate parameter groups so the optimizer already tracks all params.
+    # Backbone LR starts at 0 (frozen phase); trainer.py updates it on unfreeze.
+    if two_stage:
+        backbone_lr = float(cfg.get("train", {}).get("backbone_lr", lr * 0.1))
+        param_groups = [
+            {"params": list(model.backbone.parameters()), "lr": 0.0, "name": "backbone"},
+            {"params": list(model.head.parameters()), "lr": lr, "name": "head"},
+        ]
     else:
-        optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
+        param_groups = [{"params": model.parameters(), "lr": lr}]
+        backbone_lr = lr  # unused, kept for clarity
+
+    if opt_type == "adam":
+        optimizer = torch.optim.Adam(param_groups, lr=lr, weight_decay=wd)
+    else:
+        optimizer = torch.optim.AdamW(param_groups, lr=lr, weight_decay=wd)
 
     patience = cfg.get("train", {}).get("lr_patience", 2)
     factor = cfg.get("train", {}).get("lr_factor", 0.5)

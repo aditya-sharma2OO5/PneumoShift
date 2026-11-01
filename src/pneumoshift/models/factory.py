@@ -42,16 +42,33 @@ class PneumoShiftModel(nn.Module):
         return self.head(pooled, return_features=return_features)
 
     def freeze_backbone(self) -> None:
-        """Freezes all backbone parameters for warm-up head training."""
+        """Freezes all backbone parameters for warm-up head training.
+
+        Sets requires_grad=False on every backbone parameter AND switches
+        BatchNorm (and similar normalization) layers to eval mode so that
+        running statistics are not corrupted by the head-only warm-up data.
+        """
         for param in self.backbone.parameters():
             param.requires_grad = False
-        logger.info("Backbone frozen for %s.", self.architecture)
+        # Freeze BatchNorm running stats by switching to eval mode
+        for module in self.backbone.modules():
+            if isinstance(module, (nn.BatchNorm2d, nn.BatchNorm1d, nn.SyncBatchNorm)):
+                module.eval()
+        logger.info("Backbone frozen (incl. BN eval) for %s.", self.architecture)
 
     def unfreeze_backbone(self) -> None:
-        """Unfreezes backbone parameters for end-to-end fine-tuning."""
+        """Unfreezes backbone parameters for end-to-end fine-tuning.
+
+        Re-enables gradient computation for all backbone parameters AND
+        restores BatchNorm layers to train mode so running statistics update.
+        """
         for param in self.backbone.parameters():
             param.requires_grad = True
-        logger.info("Backbone unfrozen for %s.", self.architecture)
+        # Restore BatchNorm layers to training mode
+        for module in self.backbone.modules():
+            if isinstance(module, (nn.BatchNorm2d, nn.BatchNorm1d, nn.SyncBatchNorm)):
+                module.train()
+        logger.info("Backbone unfrozen (incl. BN train) for %s.", self.architecture)
 
 
 def build_model(

@@ -152,6 +152,7 @@ class Trainer:
 
         two_stage = self.config.get("train", {}).get("two_stage_finetune", False)
         freeze_epochs = self.config.get("train", {}).get("freeze_epochs", 3)
+        backbone_lr = float(self.config.get("train", {}).get("backbone_lr", 0.0))
 
         if two_stage and hasattr(self.model, "freeze_backbone"):
             self.model.freeze_backbone()
@@ -159,6 +160,16 @@ class Trainer:
         for epoch in range(1, epochs + 1):
             if two_stage and epoch == freeze_epochs + 1 and hasattr(self.model, "unfreeze_backbone"):
                 self.model.unfreeze_backbone()
+                # Restore backbone learning rate in the optimizer param group
+                for pg in self.optimizer.param_groups:
+                    if pg.get("name") == "backbone":
+                        head_lr = float(self.config.get("train", {}).get("learning_rate", 1e-4))
+                        pg["lr"] = backbone_lr if backbone_lr > 0 else head_lr * 0.1
+                        logger.info(
+                            "Set backbone LR to %.2e after unfreezing at epoch %d.",
+                            pg["lr"],
+                            epoch,
+                        )
 
             train_loss = self.train_epoch(epoch)
             val_metrics = self.evaluate(self.val_loader)
