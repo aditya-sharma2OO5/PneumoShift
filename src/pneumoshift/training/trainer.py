@@ -5,11 +5,12 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import average_precision_score, roc_auc_score
 from tqdm import tqdm
 
 from pneumoshift.data.harmonize_labels import SHARED_CLASSES
 from pneumoshift.training.callbacks import EarlyStopping, ModelCheckpoint
+from pneumoshift.training.metrics_logger import EpochMetricsLogger
 from pneumoshift.utils.logging import get_logger
 
 logger = get_logger("pneumoshift.training.trainer")
@@ -46,9 +47,18 @@ class Trainer:
         )
 
         checkpoint_dir = self.config.get("train", {}).get("checkpoint_dir", "results/runs/checkpoints")
-        self.checkpoint_cb = ModelCheckpoint(checkpoint_dir=checkpoint_dir)
+        primary_monitor = self.config.get("train", {}).get("save_best_metric", "val_macro_auroc")
+        secondary_monitor = self.config.get("train", {}).get("save_headline_metric", "val_pneumonia_auroc")
+        self.checkpoint_cb = ModelCheckpoint(
+            checkpoint_dir=checkpoint_dir,
+            monitor=primary_monitor,
+            secondary_monitor=secondary_monitor,
+        )
         patience = self.config.get("train", {}).get("early_stopping_patience", 6)
         self.early_stopping = EarlyStopping(patience=patience, mode="max")
+
+        run_output_dir = self.config.get("train", {}).get("run_output_dir", "results/runs")
+        self.metrics_logger = EpochMetricsLogger(output_dir=run_output_dir)
 
     def train_epoch(self, epoch: int) -> float:
         self.model.train()
@@ -118,8 +128,9 @@ class Trainer:
         y_pred = np.vstack(all_preds)
         y_true = np.vstack(all_targets)
 
-        # Calculate AUROCs per class
+        # Calculate AUROCs and AUPRCs per class
         aurocs = []
+        auprcs = []
         metrics: Dict[str, float] = {"loss": total_loss / max(len(loader), 1)}
 
         for idx, col in enumerate(self.label_cols):
@@ -128,16 +139,24 @@ class Trainer:
             col_true = y_true[valid_mask, idx]
             col_pred = y_pred[valid_mask, idx]
 
+            col_key = col.lower().replace(" ", "_")
+
             if len(np.unique(col_true)) == 2:
                 auc = float(roc_auc_score(col_true, col_pred))
+                ap = float(average_precision_score(col_true, col_pred))
             else:
                 auc = 0.5
+                ap = 0.0
             aurocs.append(auc)
-            metrics[f"auroc_{col.lower().replace(' ', '_')}"] = auc
+            auprcs.append(ap)
+            metrics[f"auroc_{col_key}"] = auc
+            metrics[f"auprc_{col_key}"] = ap
 
         metrics["val_macro_auroc"] = float(np.mean(aurocs))
+        metrics["val_macro_auprc"] = float(np.mean(auprcs))
         pneu_idx = self.label_cols.index("Pneumonia") if "Pneumonia" in self.label_cols else 5
         metrics["val_pneumonia_auroc"] = aurocs[pneu_idx]
+        metrics["val_pneumonia_auprc"] = auprcs[pneu_idx]
 
         return metrics
 
@@ -147,7 +166,9 @@ class Trainer:
             "train_loss": [],
             "val_loss": [],
             "val_macro_auroc": [],
+            "val_macro_auprc": [],
             "val_pneumonia_auroc": [],
+            "val_pneumonia_auprc": [],
         }
 
         two_stage = self.config.get("train", {}).get("two_stage_finetune", False)
@@ -181,7 +202,9 @@ class Trainer:
             history["train_loss"].append(train_loss)
             history["val_loss"].append(val_loss)
             history["val_macro_auroc"].append(val_macro)
+            history["val_macro_auprc"].append(val_metrics.get("val_macro_auprc", 0.0))
             history["val_pneumonia_auroc"].append(val_pneu)
+            history["val_pneumonia_auprc"].append(val_metrics.get("val_pneumonia_auprc", 0.0))
 
             logger.info(
                 "Epoch %02d/%02d | Train Loss: %.4f | Val Loss: %.4f | Macro AUROC: %.4f | Pneumonia AUROC: %.4f",
@@ -193,17 +216,23 @@ class Trainer:
                 val_pneu,
             )
 
+            # Log all metrics (train loss + full validation metrics) to CSV/JSON
+            epoch_row = {"train_loss": train_loss, **val_metrics}
+            self.metrics_logger.log(epoch=epoch, metrics=epoch_row)
+
+            monitor_score = val_metrics.get(self.checkpoint_cb.monitor, val_macro)
+
             # Scheduler step
             if self.lr_scheduler:
                 if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                    self.lr_scheduler.step(val_macro)
+                    self.lr_scheduler.step(monitor_score)
                 else:
                     self.lr_scheduler.step()
 
             # Checkpoint & Early stopping
-            is_best = val_macro > self.checkpoint_cb.best_score
+            is_best = monitor_score > self.checkpoint_cb.best_score
             if is_best:
-                self.checkpoint_cb.best_score = val_macro
+                self.checkpoint_cb.best_score = monitor_score
 
             self.checkpoint_cb.save(
                 model=self.model,
@@ -214,7 +243,7 @@ class Trainer:
                 is_best=is_best,
             )
 
-            self.early_stopping(val_macro)
+            self.early_stopping(monitor_score)
             if self.early_stopping.should_stop:
                 logger.info("Stopping early at epoch %d.", epoch)
                 break
