@@ -1,0 +1,78 @@
+# Cross-Domain Evaluation Configuration: NIH ChestX-ray14 -> Stanford CheXpert
+experiment_name: "nih_to_chexpert_cross_eval"
+shift_direction: "nih_to_chexpert"
+project_name: "PneumoShift"
+seed: 42
+seeds: [42, 1337, 2024]
+
+# Source Model (Trained on NIH ChestX-ray14)
+source_model:
+  source_dataset: "nih"
+  architecture: "densenet121"
+  num_classes: 8
+  dropout: 0.2
+  checkpoint_path: "results/runs/nih_densenet121/checkpoints/checkpoint_best.pt"
+  source_val_csv: "data/splits/nih/nih_val.csv"
+  source_test_metrics: "results/runs/nih_densenet121/test_metrics_densenet121_42.json"
+  target_layer: "features.norm5"
+
+# Target Dataset (Stanford CheXpert)
+target_data:
+  dataset_name: "chexpert"
+  data_dir: "data/chexpert/CheXpert-v1.0-small"
+  images_dir: "data/chexpert/CheXpert-v1.0-small"
+  splits_dir: "data/splits/chexpert"
+  test_split: "test"
+  target_cal_split: "target_cal"
+  official_val_split: "official_val"
+  image_size: 224
+  channels: 3
+  batch_size: 64
+  num_workers: 4
+  use_frontal_only: true
+  drop_lateral: true
+  uncertainty_policy: "u_zeros"
+  eval_uncertainty_modes:
+    - "uncertain_as_negative"
+    - "uncertain_excluded"
+  shared_classes:
+    - "Atelectasis"
+    - "Cardiomegaly"
+    - "Consolidation"
+    - "Edema"
+    - "Pleural Effusion"
+    - "Pneumonia"
+    - "Pneumothorax"
+    - "No Finding"
+  headline_target: "Pneumonia"
+  headline_only: false
+
+# Cross-Domain Evaluation Protocol & Statistical Testing
+eval_protocol:
+  bootstrap_samples: 1000
+  confidence_level: 0.95
+  fdr_alpha: 0.05
+  ece_bins: 15
+  ece_strategies:
+    - "uniform"
+    - "adaptive"
+  run_temperature_scaling: true
+  run_oracle_recalibration: true
+  target_calibration_ratio: 0.10
+  threshold_metrics:
+    - "youden"
+    - "f1"
+    - "sens90"
+  fixed_sensitivity_target: 0.90
+  fixed_specificity_target: 0.90
+  run_domain_probe: true
+  run_feature_mmd: true
+  subgroup_columns:
+    - "view_position"
+    - "sex"
+
+# Output Locations
+outputs:
+  output_dir: "results/tables/cross_domain/nih_to_chexpert"
+  figures_dir: "results/figures/cross_domain/nih_to_chexpert"
+
