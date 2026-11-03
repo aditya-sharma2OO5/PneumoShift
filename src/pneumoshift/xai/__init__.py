@@ -7,6 +7,12 @@ from pneumoshift.xai.stability import compute_attribution_stability
 from pneumoshift.xai.localization import compute_pointing_game_and_iou
 from pneumoshift.xai.lung_mask import compute_in_lung_attribution_ratio
 from pneumoshift.xai.shortcut_analysis import compute_shortcut_energy_ratio
+from pneumoshift.xai.config_schemas import (
+    validate_xai_config,
+    validate_faithfulness_config,
+    validate_sanity_checks_config,
+    validate_localization_config,
+)
 
 __all__ = [
     "GradCAMExplainer",
@@ -16,5 +22,9 @@ __all__ = [
     "compute_pointing_game_and_iou",
     "compute_in_lung_attribution_ratio",
     "compute_shortcut_energy_ratio",
+    "validate_xai_config",
+    "validate_faithfulness_config",
+    "validate_sanity_checks_config",
+    "validate_localization_config",
 ]
 

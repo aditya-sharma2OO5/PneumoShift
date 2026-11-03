@@ -14,6 +14,11 @@ from pneumoshift.data.splits import (
 from pneumoshift.data.transforms import get_transforms
 from pneumoshift.data.datasets import ChestXrayDataset
 from pneumoshift.data.audit import run_data_audit
+from pneumoshift.data.bbox_loader import (
+    load_nih_bounding_boxes,
+    get_bboxes_for_image,
+    create_synthetic_bbox_dataset,
+)
 
 __all__ = [
     "SHARED_CLASSES",
@@ -26,5 +31,8 @@ __all__ = [
     "get_transforms",
     "ChestXrayDataset",
     "run_data_audit",
+    "load_nih_bounding_boxes",
+    "get_bboxes_for_image",
+    "create_synthetic_bbox_dataset",
 ]
 

@@ -220,9 +220,9 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Local Datasets & Smoke Artifacts
-data/
-results/runs/
-results/figures/
-results/tables/cross_domain/
-results/tables/phase4_ablations/
-results/tables/*.json
+/data/
+/results/runs/
+/results/figures/
+/results/tables/cross_domain/
+/results/tables/phase4_ablations/
+/results/tables/*.json
