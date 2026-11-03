@@ -270,9 +270,9 @@ class TestModelFactory:
     def test_build_and_forward(self, arch: str):
         model = build_model(architecture=arch, num_classes=8, pretrained=False)
         assert isinstance(model, PneumoShiftModel)
-        x = torch.randn(1, 3, 32, 32)
+        x = torch.randn(2, 3, 32, 32)
         logits = model(x)
-        assert logits.shape == (1, 8)
+        assert logits.shape == (2, 8)
 
     @pytest.mark.parametrize("arch", ["densenet121", "efficientnet_b0"])
     def test_freeze_unfreeze_cycle(self, arch: str):
