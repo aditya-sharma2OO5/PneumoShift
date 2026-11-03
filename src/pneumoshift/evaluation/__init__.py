@@ -4,6 +4,8 @@ from pneumoshift.evaluation.metrics import compute_discrimination_metrics, compu
 from pneumoshift.evaluation.calibration import (
     compute_ece,
     compute_calibration_metrics,
+    compute_reliability_diagram_data,
+    evaluate_calibration_breakdown,
     TemperatureScaling,
 )
 from pneumoshift.evaluation.thresholds import (
@@ -40,6 +42,8 @@ __all__ = [
     "compute_generalization_gap",
     "compute_ece",
     "compute_calibration_metrics",
+    "compute_reliability_diagram_data",
+    "evaluate_calibration_breakdown",
     "TemperatureScaling",
     "compute_optimal_thresholds",
     "evaluate_threshold_transfer",
