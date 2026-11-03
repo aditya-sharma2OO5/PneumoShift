@@ -1,9 +1,11 @@
+# Model Configuration: EfficientNet-B0 Backbone for Chest Radiographs
 architecture: "efficientnet_b0"
 pretrained: true
+channels: 3
+in_features: 1280
+feature_dim: 1280
 num_classes: 8
 dropout: 0.2
 pooling: "avg"
-target_layer: "conv_head"
-feature_dim: 1280
-freeze_layers: ["conv_stem", "bn1"]
-
+target_layer: "features.8"
+freeze_layers: ["features.0", "features.1"]

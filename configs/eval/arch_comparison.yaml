@@ -1,0 +1,79 @@
+# Cross-Domain Evaluation Configuration: Architecture Comparison (DenseNet121 vs EfficientNet-B0)
+experiment_name: "architecture_comparison"
+project_name: "PneumoShift"
+seed: 42
+seeds: [42, 1337, 2024]
+
+# Architectures under comparison
+architectures:
+  - name: "densenet121"
+    feature_dim: 1024
+    target_layer: "features.norm5"
+    checkpoints:
+      nih: "results/runs/nih_densenet121/checkpoints/checkpoint_best.pt"
+      chexpert: "results/runs/chexpert_densenet121_uzeros/checkpoints/checkpoint_best.pt"
+  - name: "efficientnet_b0"
+    feature_dim: 1280
+    target_layer: "features.8"
+    checkpoints:
+      nih: "results/runs/nih_efficientnet_b0/checkpoints/checkpoint_best.pt"
+      chexpert: "results/runs/chexpert_efficientnet_b0_uzeros/checkpoints/checkpoint_best.pt"
+
+# Evaluated shift directions
+shift_directions:
+  - "nih_to_chexpert"
+  - "chexpert_to_nih"
+
+# Cohort & Class Definitions
+data:
+  image_size: 224
+  channels: 3
+  batch_size: 64
+  num_workers: 4
+  use_frontal_only: true
+  drop_lateral: true
+  uncertainty_policy: "u_zeros"
+  eval_uncertainty_modes:
+    - "uncertain_as_negative"
+    - "uncertain_excluded"
+  shared_classes:
+    - "Atelectasis"
+    - "Cardiomegaly"
+    - "Consolidation"
+    - "Edema"
+    - "Pleural Effusion"
+    - "Pneumonia"
+    - "Pneumothorax"
+    - "No Finding"
+  headline_target: "Pneumonia"
+  headline_only: false
+
+# Cross-Domain Evaluation Protocol & Statistical Hypothesis Testing
+eval_protocol:
+  bootstrap_samples: 1000
+  confidence_level: 0.95
+  fdr_alpha: 0.05
+  ece_bins: 15
+  ece_strategies:
+    - "uniform"
+    - "adaptive"
+  run_temperature_scaling: true
+  run_oracle_recalibration: true
+  target_calibration_ratio: 0.10
+  threshold_metrics:
+    - "youden"
+    - "f1"
+    - "sens90"
+  fixed_sensitivity_target: 0.90
+  fixed_specificity_target: 0.90
+  run_domain_probe: true
+  run_feature_mmd: true
+  subgroup_columns:
+    - "view_position"
+    - "sex"
+
+# Publication Tables and Figure Output Destinations
+outputs:
+  output_dir: "results/tables/cross_domain/arch_comparison"
+  figures_dir: "results/figures/cross_domain/arch_comparison"
+
