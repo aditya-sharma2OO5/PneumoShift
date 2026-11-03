@@ -46,6 +46,13 @@ from pneumoshift.evaluation.architecture_comparison import (
     generate_architecture_comparison_tables,
     run_architecture_comparison_suite,
 )
+from pneumoshift.evaluation.uncertainty_ablation import (
+    compare_uncertainty_policy_discrimination,
+    quantify_probability_overconfidence,
+    quantify_threshold_transfer_collapse,
+    generate_uncertainty_ablation_tables,
+    run_uncertainty_policy_ablation_suite,
+)
 from pneumoshift.evaluation.domain_gap import (
     train_domain_classifier_probe,
     compute_feature_mmd,
@@ -97,5 +104,10 @@ __all__ = [
     "compare_architecture_domain_divergence",
     "generate_architecture_comparison_tables",
     "run_architecture_comparison_suite",
+    "compare_uncertainty_policy_discrimination",
+    "quantify_probability_overconfidence",
+    "quantify_threshold_transfer_collapse",
+    "generate_uncertainty_ablation_tables",
+    "run_uncertainty_policy_ablation_suite",
 ]
 
