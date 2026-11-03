@@ -36,7 +36,11 @@ from pneumoshift.evaluation.cross_domain import (
 from pneumoshift.evaluation.domain_gap import (
     train_domain_classifier_probe,
     compute_feature_mmd,
+    compute_feature_space_divergence,
+    prepare_subgroup_metadata,
     evaluate_subgroups,
+    evaluate_subgroup_disparities,
+    evaluate_domain_gap_suite,
 )
 
 __all__ = [
@@ -58,7 +62,11 @@ __all__ = [
     "benjamini_hochberg_fdr",
     "train_domain_classifier_probe",
     "compute_feature_mmd",
+    "compute_feature_space_divergence",
+    "prepare_subgroup_metadata",
     "evaluate_subgroups",
+    "evaluate_subgroup_disparities",
+    "evaluate_domain_gap_suite",
     "LITERATURE_BENCHMARKS",
     "compare_against_benchmarks",
     "compare_single_vs_multitask",
