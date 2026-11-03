@@ -316,17 +316,6 @@ def main() -> None:
             print("=" * 70 + "\n")
         except Exception as exc:
             logger.warning("Could not run benchmark comparison: %s", exc)
-            f.write(f"**Sanity Status**: {bench_comp['headline_sanity_message']}\n")
-
-        print("\n" + "=" * 70)
-        print(f"BENCHMARK COMPARISON ({bench_name.upper()} vs EVALUATED)")
-        print("=" * 70)
-        print(bench_comp["table_markdown"])
-        print("-" * 70)
-        print(f"Sanity Check: {bench_comp['headline_sanity_message']}")
-        print("=" * 70 + "\n")
-    except Exception as exc:
-        logger.warning("Could not run benchmark comparison: %s", exc)
 
 
 if __name__ == "__main__":

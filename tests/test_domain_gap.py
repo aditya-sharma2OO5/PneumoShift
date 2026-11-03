@@ -161,10 +161,10 @@ def test_evaluate_subgroup_disparities():
     y_true = (np.random.rand(n, len(classes)) > 0.8).astype(np.float32)
     y_pred = np.zeros((n, len(classes)))
 
-    # Higher confidence separation on PA (first 75 samples)
+    # Perfect separation on PA (first 75 samples)
     y_pred[:75] = np.where(y_true[:75] == 1, 0.85, 0.15)
-    # Worse separation on AP (last 75 samples)
-    y_pred[75:] = np.where(y_true[75:] == 1, 0.55, 0.45)
+    # Degraded/noisy predictions on AP bedside views (last 75 samples)
+    y_pred[75:] = np.random.uniform(0.2, 0.8, size=(75, len(classes)))
 
     disparities = evaluate_subgroup_disparities(df, y_true, y_pred, findings=classes)
 
