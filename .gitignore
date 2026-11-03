@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local Datasets & Smoke Artifacts
+data/
+results/tables/cross_domain/
+results/tables/*.json
