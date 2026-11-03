@@ -21,6 +21,11 @@ from pneumoshift.evaluation.bootstrap import (
     paired_bootstrap_auroc_diff,
     benjamini_hochberg_fdr,
 )
+from pneumoshift.evaluation.cross_domain import (
+    VALID_SHIFT_DIRECTIONS,
+    resolve_cross_domain_paths,
+    validate_cross_domain_config,
+)
 from pneumoshift.evaluation.domain_gap import (
     train_domain_classifier_probe,
     compute_feature_mmd,
@@ -45,5 +50,8 @@ __all__ = [
     "LITERATURE_BENCHMARKS",
     "compare_against_benchmarks",
     "compare_single_vs_multitask",
+    "VALID_SHIFT_DIRECTIONS",
+    "validate_cross_domain_config",
+    "resolve_cross_domain_paths",
 ]
 
