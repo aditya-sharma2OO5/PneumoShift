@@ -221,5 +221,7 @@ __marimo__/
 
 # Local Datasets & Smoke Artifacts
 data/
+results/runs/
+results/figures/
 results/tables/cross_domain/
 results/tables/*.json
