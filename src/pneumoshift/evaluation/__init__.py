@@ -19,10 +19,13 @@ from pneumoshift.evaluation.benchmarks import (
 from pneumoshift.evaluation.bootstrap import (
     patient_bootstrap_ci,
     paired_bootstrap_auroc_diff,
+    two_sample_bootstrap_diff,
     benjamini_hochberg_fdr,
 )
 from pneumoshift.evaluation.cross_domain import (
     VALID_SHIFT_DIRECTIONS,
+    compute_generalization_gap_report,
+    extract_cross_domain_predictions,
     resolve_cross_domain_paths,
     validate_cross_domain_config,
 )
@@ -43,6 +46,7 @@ __all__ = [
     "compute_score_distribution_shift",
     "patient_bootstrap_ci",
     "paired_bootstrap_auroc_diff",
+    "two_sample_bootstrap_diff",
     "benjamini_hochberg_fdr",
     "train_domain_classifier_probe",
     "compute_feature_mmd",
@@ -53,5 +57,7 @@ __all__ = [
     "VALID_SHIFT_DIRECTIONS",
     "validate_cross_domain_config",
     "resolve_cross_domain_paths",
+    "extract_cross_domain_predictions",
+    "compute_generalization_gap_report",
 ]
 

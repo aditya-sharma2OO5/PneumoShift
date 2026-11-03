@@ -1,10 +1,20 @@
 """Cross-dataset evaluation harness, configuration validation, and path resolution."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
+import numpy as np
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
 
-from pneumoshift.data.harmonize_labels import HEADLINE_CLASS, SHARED_CLASSES
+from pneumoshift.data.harmonize_labels import HEADLINE_CLASS, SHARED_CLASSES, get_evaluation_targets
 from pneumoshift.data.splits import create_synthetic_dataset
+from pneumoshift.evaluation.bootstrap import (
+    benjamini_hochberg_fdr,
+    paired_bootstrap_auroc_diff,
+    two_sample_bootstrap_diff,
+)
+from pneumoshift.evaluation.metrics import compute_discrimination_metrics
 from pneumoshift.utils.logging import get_logger
 
 logger = get_logger("pneumoshift.evaluation.cross_domain")
@@ -170,4 +180,256 @@ def resolve_cross_domain_paths(
         "is_synthetic": use_synthetic,
     }
     return resolved
+
+
+def extract_cross_domain_predictions(
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Runs forward inference across loader to extract logits, calibrated probs, targets, and features.
+
+    Returns:
+        (logits, probabilities, targets, penultimate_features)
+    """
+    model.eval()
+    all_logits: List[np.ndarray] = []
+    all_targets: List[np.ndarray] = []
+    all_features: List[np.ndarray] = []
+
+    with torch.no_grad():
+        for batch in loader:
+            imgs = batch["image"].to(device)
+            targets = batch["target"].to(device)
+            logits, feats = model(imgs, return_features=True)
+
+            all_logits.append(logits.cpu().numpy())
+            all_targets.append(targets.cpu().numpy())
+            all_features.append(feats.cpu().numpy())
+
+    logits = np.vstack(all_logits)
+    targets = np.vstack(all_targets)
+    features = np.vstack(all_features)
+    probs = 1.0 / (1.0 + np.exp(-np.clip(logits, -20.0, 20.0)))
+    return logits, probs, targets, features
+
+
+def _extract_metric_value(metrics_dict: Dict[str, Any], finding: str, metric_name: str) -> Optional[float]:
+    """Helper to retrieve metric value from varying formats (flat vs nested per_class)."""
+    col_key = finding.lower().replace(" ", "_")
+    candidates = [
+        f"{metric_name}_{col_key}",
+        f"val_{col_key}_{metric_name}",
+        f"test_{col_key}_{metric_name}",
+        f"val_{metric_name}",
+        f"test_{metric_name}",
+    ]
+    for c in candidates:
+        if c in metrics_dict and metrics_dict[c] is not None:
+            try:
+                val = float(metrics_dict[c])
+                if not np.isnan(val):
+                    return val
+            except (ValueError, TypeError):
+                pass
+
+    if "per_class" in metrics_dict and finding in metrics_dict["per_class"]:
+        f_dict = metrics_dict["per_class"][finding]
+        if metric_name in f_dict and f_dict[metric_name] is not None:
+            try:
+                val = float(f_dict[metric_name])
+                if not np.isnan(val):
+                    return val
+            except (ValueError, TypeError):
+                pass
+
+    return None
+
+
+def compute_generalization_gap_report(
+    in_domain_metrics: Dict[str, Any],
+    cross_domain_metrics: Dict[str, Any],
+    shift_direction: str = "nih_to_chexpert",
+    findings: Optional[List[str]] = None,
+    source_patients: Optional[np.ndarray] = None,
+    source_targets: Optional[np.ndarray] = None,
+    source_preds: Optional[np.ndarray] = None,
+    target_patients: Optional[np.ndarray] = None,
+    target_targets: Optional[np.ndarray] = None,
+    target_preds: Optional[np.ndarray] = None,
+    target_in_domain_preds: Optional[np.ndarray] = None,
+    fdr_alpha: float = 0.05,
+    n_resamples: int = 1000,
+    seed: int = 42,
+) -> Dict[str, Any]:
+    """Computes discrimination Generalization Gaps and executes statistical hypothesis tests.
+
+    Formula:
+        Generalization Gap: Δ = in_domain_metric - cross_domain_metric
+        A positive Δ represents performance degradation under domain shift.
+
+    Args:
+        in_domain_metrics: Evaluation results dict from in-domain test set.
+        cross_domain_metrics: Evaluation results dict from cross-domain target test set.
+        shift_direction: 'nih_to_chexpert' or 'chexpert_to_nih'.
+        findings: List of target classes (default: SHARED_CLASSES).
+        source_patients: Optional array of patient IDs for source cohort.
+        source_targets: Optional ground truth targets for source cohort.
+        source_preds: Optional model predictions on source cohort.
+        target_patients: Optional array of patient IDs for target cohort.
+        target_targets: Optional ground truth targets for target cohort.
+        target_preds: Optional model predictions on target cohort.
+        target_in_domain_preds: Optional in-domain baseline predictions on identical target cases.
+        fdr_alpha: Benjamini-Hochberg FDR significance threshold.
+        n_resamples: Number of bootstrap iterations.
+        seed: Random seed.
+
+    Returns:
+        Structured dict with per-class and macro gaps, statistical significance, and markdown table.
+    """
+    classes = findings or SHARED_CLASSES
+    gaps: Dict[str, Dict[str, Any]] = {}
+    raw_p_values: List[float] = []
+    evaluated_findings: List[str] = []
+
+    macro_in_auc = in_domain_metrics.get("macro_auroc", in_domain_metrics.get("val_macro_auroc"))
+    macro_cross_auc = cross_domain_metrics.get("macro_auroc", cross_domain_metrics.get("val_macro_auroc"))
+    macro_in_prc = in_domain_metrics.get("macro_auprc", in_domain_metrics.get("val_macro_auprc"))
+    macro_cross_prc = cross_domain_metrics.get("macro_auprc", cross_domain_metrics.get("val_macro_auprc"))
+
+    table_rows = [
+        f"### Generalization Gap Analysis ({shift_direction.upper()})",
+        "",
+        "| Finding | In-Domain AUROC | Cross-Domain AUROC | Gap (Δ AUROC) | In-Domain AUPRC | Cross-Domain AUPRC | Gap (Δ AUPRC) | p-value | FDR Sig (q<0.05) |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+    ]
+
+    for idx, f in enumerate(classes):
+        in_auc = _extract_metric_value(in_domain_metrics, f, "auroc")
+        cross_auc = _extract_metric_value(cross_domain_metrics, f, "auroc")
+        in_prc = _extract_metric_value(in_domain_metrics, f, "auprc")
+        cross_prc = _extract_metric_value(cross_domain_metrics, f, "auprc")
+        in_sens90 = _extract_metric_value(in_domain_metrics, f, "sens_at_90_spec")
+        cross_sens90 = _extract_metric_value(cross_domain_metrics, f, "sens_at_90_spec")
+
+        gap_auc = (in_auc - cross_auc) if (in_auc is not None and cross_auc is not None) else None
+        gap_prc = (in_prc - cross_prc) if (in_prc is not None and cross_prc is not None) else None
+        gap_sens90 = (in_sens90 - cross_sens90) if (in_sens90 is not None and cross_sens90 is not None) else None
+
+        # Statistical testing on AUROC difference
+        p_val = 1.0
+        ci_diff = (0.0, 0.0)
+        has_test = False
+
+        # Case A: Paired testing on identical target cases (cross-domain model vs in-domain target baseline)
+        if (
+            target_patients is not None
+            and target_targets is not None
+            and target_preds is not None
+            and target_in_domain_preds is not None
+        ):
+            y_t = target_targets[:, idx] if target_targets.ndim > 1 else target_targets
+            y_cross = target_preds[:, idx] if target_preds.ndim > 1 else target_preds
+            y_in = target_in_domain_preds[:, idx] if target_in_domain_preds.ndim > 1 else target_in_domain_preds
+
+            valid = (y_t == 0.0) | (y_t == 1.0)
+            if np.sum(valid) > 10 and len(np.unique(y_t[valid])) == 2:
+                test_res = paired_bootstrap_auroc_diff(
+                    patient_ids=target_patients[valid],
+                    y_true=y_t[valid],
+                    y_pred_a=y_in[valid],
+                    y_pred_b=y_cross[valid],
+                    n_resamples=n_resamples,
+                    seed=seed,
+                )
+                p_val = test_res["p_value"]
+                ci_diff = (test_res["ci_lower"], test_res["ci_upper"])
+                has_test = True
+
+        # Case B: Two-sample testing across disjoint source and target patient populations
+        elif (
+            source_patients is not None
+            and source_targets is not None
+            and source_preds is not None
+            and target_patients is not None
+            and target_targets is not None
+            and target_preds is not None
+        ):
+            y_s_t = source_targets[:, idx] if source_targets.ndim > 1 else source_targets
+            y_s_p = source_preds[:, idx] if source_preds.ndim > 1 else source_preds
+            y_t_t = target_targets[:, idx] if target_targets.ndim > 1 else target_targets
+            y_t_p = target_preds[:, idx] if target_preds.ndim > 1 else target_preds
+
+            v_s = (y_s_t == 0.0) | (y_s_t == 1.0)
+            v_t = (y_t_t == 0.0) | (y_t_t == 1.0)
+
+            if np.sum(v_s) > 10 and np.sum(v_t) > 10:
+                test_res = two_sample_bootstrap_diff(
+                    patient_ids_a=source_patients[v_s],
+                    y_true_a=y_s_t[v_s],
+                    y_pred_a=y_s_p[v_s],
+                    patient_ids_b=target_patients[v_t],
+                    y_true_b=y_t_t[v_t],
+                    y_pred_b=y_t_p[v_t],
+                    n_resamples=n_resamples,
+                    seed=seed,
+                )
+                p_val = test_res["p_value"]
+                ci_diff = (test_res["ci_lower"], test_res["ci_upper"])
+                has_test = True
+
+        raw_p_values.append(p_val)
+        evaluated_findings.append(f)
+
+        gaps[f] = {
+            "in_domain_auroc": in_auc,
+            "cross_domain_auroc": cross_auc,
+            "gap_auroc": gap_auc,
+            "in_domain_auprc": in_prc,
+            "cross_domain_auprc": cross_prc,
+            "gap_auprc": gap_prc,
+            "gap_sens_at_90_spec": gap_sens90,
+            "p_value": p_val if has_test else None,
+            "ci_diff_95": ci_diff if has_test else None,
+        }
+
+    # Apply FDR correction
+    adj_p_values, sig_flags = benjamini_hochberg_fdr(raw_p_values, q=fdr_alpha)
+    for i, f in enumerate(evaluated_findings):
+        gaps[f]["fdr_adjusted_p_value"] = float(adj_p_values[i])
+        gaps[f]["fdr_significant"] = bool(sig_flags[i])
+
+        g_info = gaps[f]
+        in_auc_str = f"{g_info['in_domain_auroc']:.4f}" if g_info['in_domain_auroc'] is not None else "—"
+        cross_auc_str = f"{g_info['cross_domain_auroc']:.4f}" if g_info['cross_domain_auroc'] is not None else "—"
+        gap_auc_str = f"{g_info['gap_auroc']:+.4f}" if g_info['gap_auroc'] is not None else "—"
+        in_prc_str = f"{g_info['in_domain_auprc']:.4f}" if g_info['in_domain_auprc'] is not None else "—"
+        cross_prc_str = f"{g_info['cross_domain_auprc']:.4f}" if g_info['cross_domain_auprc'] is not None else "—"
+        gap_prc_str = f"{g_info['gap_auprc']:+.4f}" if g_info['gap_auprc'] is not None else "—"
+        p_str = f"{g_info['p_value']:.4f}" if g_info['p_value'] is not None else "—"
+        sig_str = "**Yes**" if g_info['fdr_significant'] else "No"
+
+        table_rows.append(
+            f"| **{f}** | {in_auc_str} | {cross_auc_str} | {gap_auc_str} | {in_prc_str} | {cross_prc_str} | {gap_prc_str} | {p_str} | {sig_str} |"
+        )
+
+    # Macro averages
+    macro_gap_auc = (macro_in_auc - macro_cross_auc) if (macro_in_auc and macro_cross_auc) else None
+    macro_gap_prc = (macro_in_prc - macro_cross_prc) if (macro_in_prc and macro_cross_prc) else None
+
+    table_rows.append(
+        f"| **Macro Average** | {macro_in_auc:.4f} | {macro_cross_auc:.4f} | {macro_gap_auc:+.4f} | {macro_in_prc:.4f} | {macro_cross_prc:.4f} | {macro_gap_prc:+.4f} | — | — |"
+        if (macro_in_auc and macro_cross_auc and macro_in_prc and macro_cross_prc) else ""
+    )
+
+    markdown_report = "\n".join([r for r in table_rows if r])
+
+    return {
+        "shift_direction": shift_direction,
+        "per_class_gaps": gaps,
+        "macro_gap_auroc": macro_gap_auc,
+        "macro_gap_auprc": macro_gap_prc,
+        "headline_pneumonia_gap": gaps.get("Pneumonia", {}),
+        "markdown_table": markdown_report,
+    }
 

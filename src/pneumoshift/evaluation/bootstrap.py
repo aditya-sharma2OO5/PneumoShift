@@ -102,6 +102,84 @@ def paired_bootstrap_auroc_diff(
     }
 
 
+def two_sample_bootstrap_diff(
+    patient_ids_a: np.ndarray,
+    y_true_a: np.ndarray,
+    y_pred_a: np.ndarray,
+    patient_ids_b: np.ndarray,
+    y_true_b: np.ndarray,
+    y_pred_b: np.ndarray,
+    metric_fn: Optional[Callable[[np.ndarray, np.ndarray], float]] = None,
+    n_resamples: int = 1000,
+    confidence_level: float = 0.95,
+    seed: int = 42,
+) -> Dict[str, Any]:
+    """Calculates independent two-sample patient-clustered bootstrap difference between cohorts A and B.
+
+    Used when comparing in-domain performance on source test set vs cross-domain performance
+    on target test set across disjoint patient populations.
+
+    Returns:
+        Dict with mean_diff (metric_a - metric_b), ci_lower, ci_upper, p_value, and significance.
+    """
+    fn = metric_fn or roc_auc_score
+    val_a = float(fn(y_true_a, y_pred_a))
+    val_b = float(fn(y_true_b, y_pred_b))
+    orig_diff = val_a - val_b
+
+    unique_patients_a = np.unique(patient_ids_a)
+    unique_patients_b = np.unique(patient_ids_b)
+
+    idx_map_a = {p: np.where(patient_ids_a == p)[0] for p in unique_patients_a}
+    idx_map_b = {p: np.where(patient_ids_b == p)[0] for p in unique_patients_b}
+
+    rng = np.random.RandomState(seed)
+    diffs: List[float] = []
+
+    for _ in range(n_resamples):
+        samp_p_a = rng.choice(unique_patients_a, size=len(unique_patients_a), replace=True)
+        samp_p_b = rng.choice(unique_patients_b, size=len(unique_patients_b), replace=True)
+
+        idx_a = np.concatenate([idx_map_a[p] for p in samp_p_a])
+        idx_b = np.concatenate([idx_map_b[p] for p in samp_p_b])
+
+        yt_a, yp_a = y_true_a[idx_a], y_pred_a[idx_a]
+        yt_b, yp_b = y_true_b[idx_b], y_pred_b[idx_b]
+
+        if len(np.unique(yt_a)) < 2 or len(np.unique(yt_b)) < 2:
+            continue
+
+        try:
+            diffs.append(float(fn(yt_a, yp_a) - fn(yt_b, yp_b)))
+        except Exception:
+            continue
+
+    if not diffs:
+        return {
+            "mean_diff": orig_diff,
+            "ci_lower": orig_diff,
+            "ci_upper": orig_diff,
+            "p_value": 1.0,
+            "significant": False,
+        }
+
+    alpha = 1.0 - confidence_level
+    ci_lower = float(np.percentile(diffs, 100 * (alpha / 2.0)))
+    ci_upper = float(np.percentile(diffs, 100 * (1.0 - alpha / 2.0)))
+
+    # Two-sided empirical p-value for H0: diff == 0
+    p_val = float(2.0 * min(np.mean(np.array(diffs) <= 0), np.mean(np.array(diffs) >= 0)))
+    p_val = min(p_val, 1.0)
+
+    return {
+        "mean_diff": orig_diff,
+        "ci_lower": ci_lower,
+        "ci_upper": ci_upper,
+        "p_value": p_val,
+        "significant": bool(ci_lower > 0 or ci_upper < 0),
+    }
+
+
 def benjamini_hochberg_fdr(p_values: List[float], q: float = 0.05) -> Tuple[List[float], List[bool]]:
     """Applies Benjamini-Hochberg procedure to control False Discovery Rate."""
     p_vals = np.array(p_values)
