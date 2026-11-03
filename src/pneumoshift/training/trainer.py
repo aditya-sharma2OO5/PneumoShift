@@ -76,7 +76,16 @@ class Trainer:
 
             with torch.cuda.amp.autocast(enabled=self.scaler.is_enabled()):
                 logits = self.model(images)
-                loss = self.criterion(logits, targets, masks)
+                if masks is not None:
+                    try:
+                        loss = self.criterion(logits, targets, masks)
+                    except TypeError:
+                        loss = self.criterion(logits, targets)
+                else:
+                    try:
+                        loss = self.criterion(logits, targets)
+                    except TypeError:
+                        loss = self.criterion(logits, targets, None)
                 if grad_accum_steps > 1:
                     loss = loss / grad_accum_steps
 
@@ -119,7 +128,16 @@ class Trainer:
                 masks = masks.to(self.device)
 
             logits = self.model(images)
-            loss = self.criterion(logits, targets, masks)
+            if masks is not None:
+                try:
+                    loss = self.criterion(logits, targets, masks)
+                except TypeError:
+                    loss = self.criterion(logits, targets)
+            else:
+                try:
+                    loss = self.criterion(logits, targets)
+                except TypeError:
+                    loss = self.criterion(logits, targets, None)
             total_loss += loss.item()
 
             probs = torch.sigmoid(logits)

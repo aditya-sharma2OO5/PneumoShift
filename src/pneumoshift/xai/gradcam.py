@@ -41,33 +41,39 @@ class GradCAMExplainer:
         Returns:
             np.ndarray heatmap of shape (H, W) scaled to [0, 1].
         """
-        self.model.zero_grad()
-        if target_size is None:
-            target_size = (input_tensor.shape[2], input_tensor.shape[3])
+        was_training = self.model.training
+        self.model.eval()
+        try:
+            self.model.zero_grad()
+            if target_size is None:
+                target_size = (input_tensor.shape[2], input_tensor.shape[3])
 
-        logits = self.model(input_tensor)
-        score = logits[:, target_class_idx]
-        score.backward(retain_graph=True)
+            logits = self.model(input_tensor)
+            score = logits[:, target_class_idx]
+            score.backward(retain_graph=True)
 
-        if self.gradients is None or self.activations is None:
-            raise RuntimeError("Grad-CAM hooks failed to capture gradients or activations.")
+            if self.gradients is None or self.activations is None:
+                raise RuntimeError("Grad-CAM hooks failed to capture gradients or activations.")
 
-        # Channel-wise mean of gradients
-        weights = torch.mean(self.gradients, dim=(2, 3), keepdim=True)
-        cam = torch.sum(weights * self.activations, dim=1, keepdim=True)
-        cam = F.relu(cam)
+            # Channel-wise mean of gradients
+            weights = torch.mean(self.gradients, dim=(2, 3), keepdim=True)
+            cam = torch.sum(weights * self.activations, dim=1, keepdim=True)
+            cam = F.relu(cam)
 
-        cam = F.interpolate(cam, size=target_size, mode="bilinear", align_corners=False)
-        cam = cam.squeeze().cpu().numpy()
+            cam = F.interpolate(cam, size=target_size, mode="bilinear", align_corners=False)
+            cam = cam.squeeze().cpu().numpy()
 
-        # Min-max normalization
-        cam_min, cam_max = cam.min(), cam.max()
-        if cam_max > cam_min:
-            cam = (cam - cam_min) / (cam_max - cam_min)
-        else:
-            cam = np.zeros_like(cam)
+            # Min-max normalization
+            cam_min, cam_max = cam.min(), cam.max()
+            if cam_max > cam_min:
+                cam = (cam - cam_min) / (cam_max - cam_min)
+            else:
+                cam = np.zeros_like(cam)
 
-        return cam
+            return cam
+        finally:
+            if was_training:
+                self.model.train()
 
     def release_hooks(self) -> None:
         """Removes PyTorch hooks."""

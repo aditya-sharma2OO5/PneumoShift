@@ -68,9 +68,10 @@ def compute_deletion_insertion_curves(
             ins_prob = float(torch.sigmoid(model(ins_img))[0, target_class_idx].item())
             insertion_scores.append(ins_prob)
 
-    # Compute numerical trapezoidal AUC
-    deletion_auc = float(np.trapz(deletion_scores, percentages))
-    insertion_auc = float(np.trapz(insertion_scores, percentages))
+    # Compute numerical trapezoidal AUC (compatible with numpy 1.x and 2.x)
+    trapz_fn = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    deletion_auc = float(trapz_fn(deletion_scores, percentages))
+    insertion_auc = float(trapz_fn(insertion_scores, percentages))
 
     return {
         "percentages": percentages.tolist(),

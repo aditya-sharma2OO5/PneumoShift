@@ -30,7 +30,7 @@ class PneumoShiftModel(nn.Module):
     ) -> torch.Tensor | Tuple[torch.Tensor, torch.Tensor]:
         if "densenet" in self.architecture:
             features = self.backbone(x)
-            out = nn.functional.relu(features, inplace=True)
+            out = nn.functional.relu(features, inplace=False)
             pooled = nn.functional.adaptive_avg_pool2d(out, (1, 1)).flatten(1)
         elif "efficientnet" in self.architecture:
             features = self.backbone(x)
