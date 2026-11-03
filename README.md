@@ -101,7 +101,7 @@ pytest tests/test_smoke.py
 - [x] **P1 Data**: Frontal filtering, label harmonization (8 shared classes), patient-partitioned splits with zero overlap, and distribution audit.
 - [x] **P2 Training**: In-domain DenseNet121 baseline models on NIH ChestX-ray14 and Stanford CheXpert.
 - [x] **P3 Cross-Dataset Evaluation**: Cross-domain generalization gap ($-0.107$ AUROC on Pneumonia), 4-regime ECE calibration and oracle recalibration ($48\%$ recovery on 10% `target_cal`), threshold transfer collapse, penultimate feature probes (0.985 AUROC), and subgroup confounders (see [`docs/PHASE3_REPORT.md`](docs/PHASE3_REPORT.md)).
-- [ ] **P4 Architecture & Uncertainty Ablation**: EfficientNet-B0 evaluation, multi-seed replication (seeds 42, 1337, 2024), and CheXpert uncertainty ablations (U-Zeros vs U-Ones vs U-Ignore).
+- [x] **P4 Architecture & Uncertainty Ablation**: EfficientNet-B0 comparison (generalization gap narrowing, $D=1280$ vs $1024$ linear domain probe, MMD shift), CheXpert label uncertainty ablations (U-Zeros vs U-Ones vs U-Ignore, over-prediction ratio, specificity collapse), and 3-seed statistical significance replication (seeds 42, 1337, 2024; paired t-test and Wilcoxon; see [`docs/PHASE4_REPORT.md`](docs/PHASE4_REPORT.md)).
 - [ ] **P5 Explainability Suite**: Grad-CAM attribution, deletion/insertion faithfulness curves, parameter randomization sanity checks, stability across seeds, BBox pointing game, and lung-field plausibility.
 - [ ] **P6 Results Aggregation**: Master summary tables with patient-bootstrap 95% CIs and FDR-adjusted hypothesis tests.
 - [ ] **P7 Paper Deliverables**: Automated markdown results report, publication figures, and reproducibility checklist.
