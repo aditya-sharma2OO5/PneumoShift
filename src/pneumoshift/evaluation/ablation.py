@@ -17,6 +17,9 @@ def _extract_pneumonia_metric(metrics: Dict[str, Any], key_suffix: str) -> Optio
         f"test_pneumonia_{key_suffix}",
         f"pneumonia_{key_suffix}",
         f"{key_suffix}_pneumonia",
+        key_suffix,
+        f"val_{key_suffix}",
+        f"test_{key_suffix}",
     ]
     for c in candidates:
         if c in metrics and metrics[c] is not None:
@@ -84,9 +87,9 @@ def compare_single_vs_multitask(
     multi_ece = _extract_pneumonia_metric(multitask_results, "ece")
     single_ece = _extract_pneumonia_metric(singletask_results, "ece")
 
-    delta_auroc = (multi_auroc - single_auroc) if (multi_auroc and single_auroc) else None
-    delta_auprc = (multi_auprc - single_auprc) if (multi_auprc and single_auprc) else None
-    delta_ece = (multi_ece - single_ece) if (multi_ece and single_ece) else None
+    delta_auroc = (multi_auroc - single_auroc) if (multi_auroc is not None and single_auroc is not None) else None
+    delta_auprc = (multi_auprc - single_auprc) if (multi_auprc is not None and single_auprc is not None) else None
+    delta_ece = (multi_ece - single_ece) if (multi_ece is not None and single_ece is not None) else None
 
     # Paired bootstrap hypothesis test: H0: AUROC_multi == AUROC_single
     significance_test: Optional[Dict[str, Any]] = None

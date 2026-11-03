@@ -39,6 +39,13 @@ from pneumoshift.evaluation.config_schemas import (
     validate_arch_comparison_config,
     validate_uncertainty_ablation_config,
 )
+from pneumoshift.evaluation.architecture_comparison import (
+    compare_architecture_generalization_gaps,
+    compare_architecture_calibration,
+    compare_architecture_domain_divergence,
+    generate_architecture_comparison_tables,
+    run_architecture_comparison_suite,
+)
 from pneumoshift.evaluation.domain_gap import (
     train_domain_classifier_probe,
     compute_feature_mmd,
@@ -85,5 +92,10 @@ __all__ = [
     "validate_train_config",
     "validate_arch_comparison_config",
     "validate_uncertainty_ablation_config",
+    "compare_architecture_generalization_gaps",
+    "compare_architecture_calibration",
+    "compare_architecture_domain_divergence",
+    "generate_architecture_comparison_tables",
+    "run_architecture_comparison_suite",
 ]
 
