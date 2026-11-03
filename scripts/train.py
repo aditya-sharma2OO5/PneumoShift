@@ -42,7 +42,13 @@ def main() -> None:
     parser.add_argument("--eval_test", action="store_true", help="Evaluate best checkpoint on test set after training")
     args = parser.parse_args()
 
-    config_path = "configs/smoke_test.yaml" if args.smoke_test else args.config
+    if args.config != "configs/default.yaml":
+        config_path = args.config
+    elif args.smoke_test:
+        config_path = "configs/smoke_test.yaml"
+    else:
+        config_path = args.config
+
     cfg = load_yaml_config(config_path)
 
     seed = args.seed if args.seed is not None else cfg.get("seed", 42)
@@ -56,24 +62,23 @@ def main() -> None:
     headline_only = cfg.get("data", {}).get("headline_only", False)
     cache_preprocessed = cfg.get("data", {}).get("cache_preprocessed", False)
     cache_dir = cfg.get("data", {}).get("cache_dir", None) if cache_preprocessed else None
+    ds_name = cfg.get("data", {}).get("dataset_name", "nih")
+    splits_dir = Path(cfg.get("data", {}).get("splits_dir", "data/splits"))
+    synth_dir = Path("data/synthetic")
 
     logger.info("Initializing run with arch=%s, seed=%d, epochs=%d, headline_only=%s", arch, seed, epochs, headline_only)
 
-    if args.smoke_test or cfg.get("data", {}).get("dataset_name") == "synthetic":
-        synth_dir = Path("data/synthetic")
+    if args.smoke_test or ds_name == "synthetic":
         create_synthetic_dataset(output_dir=synth_dir, num_samples=30, image_size=img_size, seed=seed)
         train_df = pd.read_csv(synth_dir / "splits" / "synthetic_train.csv")
         val_df = pd.read_csv(synth_dir / "splits" / "synthetic_val.csv")
         img_dir = synth_dir / "images"
     else:
-        splits_dir = Path(cfg.get("data", {}).get("splits_dir", "data/splits"))
-        ds_name = cfg.get("data", {}).get("dataset_name", "nih")
         train_csv = resolve_split_path(splits_dir, ds_name, "train")
         val_csv = resolve_split_path(splits_dir, ds_name, "val")
 
         if not train_csv.is_file() or not val_csv.is_file():
             logger.warning("Split files not found (%s, %s). Falling back to synthetic smoke data.", train_csv, val_csv)
-            synth_dir = Path("data/synthetic")
             create_synthetic_dataset(output_dir=synth_dir, num_samples=30, image_size=img_size, seed=seed)
             train_df = pd.read_csv(synth_dir / "splits" / "synthetic_train.csv")
             val_df = pd.read_csv(synth_dir / "splits" / "synthetic_val.csv")

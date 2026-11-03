@@ -23,6 +23,7 @@ class PneumoShiftModel(nn.Module):
         self.backbone = backbone
         self.head = head
         self.architecture = architecture
+        self._backbone_frozen = False
 
     def forward(
         self, x: torch.Tensor, return_features: bool = False
@@ -41,6 +42,17 @@ class PneumoShiftModel(nn.Module):
 
         return self.head(pooled, return_features=return_features)
 
+    def train(self, mode: bool = True) -> "PneumoShiftModel":
+        """Sets module in training mode, preserving backbone freeze and BatchNorm eval mode if frozen."""
+        super().train(mode)
+        if getattr(self, "_backbone_frozen", False) and mode:
+            for param in self.backbone.parameters():
+                param.requires_grad = False
+            for module in self.backbone.modules():
+                if isinstance(module, (nn.BatchNorm2d, nn.BatchNorm1d, nn.SyncBatchNorm)):
+                    module.eval()
+        return self
+
     def freeze_backbone(self) -> None:
         """Freezes all backbone parameters for warm-up head training.
 
@@ -48,6 +60,7 @@ class PneumoShiftModel(nn.Module):
         BatchNorm (and similar normalization) layers to eval mode so that
         running statistics are not corrupted by the head-only warm-up data.
         """
+        self._backbone_frozen = True
         for param in self.backbone.parameters():
             param.requires_grad = False
         # Freeze BatchNorm running stats by switching to eval mode
@@ -62,6 +75,7 @@ class PneumoShiftModel(nn.Module):
         Re-enables gradient computation for all backbone parameters AND
         restores BatchNorm layers to train mode so running statistics update.
         """
+        self._backbone_frozen = False
         for param in self.backbone.parameters():
             param.requires_grad = True
         # Restore BatchNorm layers to training mode
