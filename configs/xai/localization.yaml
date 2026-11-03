@@ -1,0 +1,43 @@
+# Localization Benchmarking, Pointing Game & Shortcut Energy Configuration
+experiment_name: "localization_and_shortcuts"
+
+method: "gradcam"
+target_class: "Pneumonia"
+target_class_idx: 5
+
+bbox_csv: "data/nih_cxr/BBox_List_2017.csv"
+original_image_size: [1024, 1024]
+evaluation_image_size: [224, 224]
+
+iou_thresholds:
+  - 0.1
+  - 0.3
+  - 0.5
+
+binarize_thresholds:
+  - 0.3
+  - 0.5
+  - 0.7
+
+shortcut_analysis:
+  border_margin_fraction: 0.05
+  corner_margin_fraction: 0.08
+  use_anatomical_lung_mask: true
+
+models_to_evaluate:
+  - name: "DenseNet121_NIH_InDomain"
+    architecture: "densenet121"
+    checkpoint: "results/runs/nih_densenet121/checkpoints/checkpoint_best_pneumonia.pt"
+  - name: "DenseNet121_CheXpert_Transferred"
+    architecture: "densenet121"
+    checkpoint: "results/runs/chexpert_densenet121_uzeros/checkpoints/checkpoint_best_pneumonia.pt"
+  - name: "EfficientNetB0_NIH_InDomain"
+    architecture: "efficientnet_b0"
+    checkpoint: "results/runs/nih_efficientnet_b0/checkpoints/checkpoint_best_pneumonia.pt"
+  - name: "EfficientNetB0_CheXpert_Transferred"
+    architecture: "efficientnet_b0"
+    checkpoint: "results/runs/chexpert_efficientnet_b0/checkpoints/checkpoint_best_pneumonia.pt"
+
+output_dir: "results/tables/xai"
+figures_dir: "results/figures/xai/localization"
+

@@ -1,22 +1,45 @@
+# Global Explainability (XAI) Master Configuration
 method: "gradcam"
-target_layer: "features.norm5"
-secondary_method: "gradcam_plus_plus"
+target_class: "Pneumonia"
+target_class_idx: 5
+
+target_layers:
+  densenet121: "features.denseblock4"
+  efficientnet_b0: "features.8"
+
+overlay:
+  colormap: "jet"
+  alpha: 0.5
+  blur_sigma: 1.0
+
 faithfulness:
-  deletion_steps: 10
-  insertion_steps: 10
-  step_size_percent: 5
+  num_steps: 10
+  step_size_percent: 5.0
+  max_mask_percent: 50.0
+  baseline_modes: ["zero", "blur", "mean"]
+  blur_kernel_size: 11
+  blur_sigma: 5.0
+
 stability:
-  num_perturbations: 10
-  rotation_degrees: 5
-  brightness_factor: 0.1
+  num_perturbations: 5
+  rotation_degrees: 5.0
+  brightness_factor: 0.05
+  translation_percent: 0.05
+
 sanity_checks:
-  randomize_layers: ["classifier", "features.denseblock4", "all"]
+  randomize_modes: ["classifier", "cascading", "all"]
+  correlation_metrics: ["spearman", "pearson", "mse"]
+  threshold_drop_percent: 75.0
+
 localization:
   bbox_csv: "data/nih_cxr/BBox_List_2017.csv"
   iou_thresholds: [0.1, 0.3, 0.5]
-shortcut_analysis:
-  border_margin_percent: 0.05
-  corner_margin_percent: 0.08
-  device_mask_enabled: true
-output_dir: "results/figures/xai"
+  binarize_thresholds: [0.3, 0.5, 0.7]
 
+shortcut_analysis:
+  border_margin_fraction: 0.05
+  corner_margin_fraction: 0.08
+  use_anatomical_lung_mask: true
+
+output_dir: "results/figures/xai"
+tables_dir: "results/tables/xai"

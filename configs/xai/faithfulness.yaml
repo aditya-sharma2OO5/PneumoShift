@@ -1,0 +1,36 @@
+# Faithfulness Dynamics Configuration (Deletion & Insertion Dynamics)
+experiment_name: "faithfulness_dynamics"
+
+method: "gradcam"
+target_class: "Pneumonia"
+target_class_idx: 5
+
+num_steps: 10
+step_size_percent: 5.0
+max_mask_percent: 50.0
+
+baseline_modes:
+  - "zero"
+  - "blur"
+  - "mean"
+
+blur_kernel_size: 11
+blur_sigma: 5.0
+
+models_to_evaluate:
+  - name: "DenseNet121_NIH_InDomain"
+    architecture: "densenet121"
+    checkpoint: "results/runs/nih_densenet121/checkpoints/checkpoint_best_pneumonia.pt"
+  - name: "DenseNet121_CheXpert_Transferred"
+    architecture: "densenet121"
+    checkpoint: "results/runs/chexpert_densenet121_uzeros/checkpoints/checkpoint_best_pneumonia.pt"
+  - name: "EfficientNetB0_NIH_InDomain"
+    architecture: "efficientnet_b0"
+    checkpoint: "results/runs/nih_efficientnet_b0/checkpoints/checkpoint_best_pneumonia.pt"
+  - name: "EfficientNetB0_CheXpert_Transferred"
+    architecture: "efficientnet_b0"
+    checkpoint: "results/runs/chexpert_efficientnet_b0/checkpoints/checkpoint_best_pneumonia.pt"
+
+output_dir: "results/tables/xai"
+figures_dir: "results/figures/xai/faithfulness"
+

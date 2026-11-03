@@ -1,0 +1,31 @@
+# Model Parameter Randomization Sanity Checks Configuration (Adebayo et al.)
+experiment_name: "parameter_randomization_sanity"
+
+method: "gradcam"
+target_class: "Pneumonia"
+target_class_idx: 5
+
+randomize_modes:
+  - "classifier"
+  - "cascading"
+  - "all"
+
+correlation_metrics:
+  - "spearman"
+  - "pearson"
+  - "mse"
+
+threshold_drop_percent: 75.0
+max_samples_to_audit: 50
+
+models_to_evaluate:
+  - name: "DenseNet121_NIH"
+    architecture: "densenet121"
+    checkpoint: "results/runs/nih_densenet121/checkpoints/checkpoint_best_pneumonia.pt"
+  - name: "EfficientNetB0_NIH"
+    architecture: "efficientnet_b0"
+    checkpoint: "results/runs/nih_efficientnet_b0/checkpoints/checkpoint_best_pneumonia.pt"
+
+output_dir: "results/tables/xai"
+figures_dir: "results/figures/xai/sanity_checks"
+
