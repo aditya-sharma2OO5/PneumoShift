@@ -9,9 +9,11 @@ from pneumoshift.evaluation.calibration import (
     TemperatureScaling,
 )
 from pneumoshift.evaluation.thresholds import (
+    compute_binary_metrics_at_threshold,
     compute_optimal_thresholds,
     evaluate_threshold_transfer,
     compute_score_distribution_shift,
+    evaluate_threshold_transfer_suite,
 )
 from pneumoshift.evaluation.ablation import compare_single_vs_multitask
 from pneumoshift.evaluation.benchmarks import (
@@ -45,9 +47,11 @@ __all__ = [
     "compute_reliability_diagram_data",
     "evaluate_calibration_breakdown",
     "TemperatureScaling",
+    "compute_binary_metrics_at_threshold",
     "compute_optimal_thresholds",
     "evaluate_threshold_transfer",
     "compute_score_distribution_shift",
+    "evaluate_threshold_transfer_suite",
     "patient_bootstrap_ci",
     "paired_bootstrap_auroc_diff",
     "two_sample_bootstrap_diff",
