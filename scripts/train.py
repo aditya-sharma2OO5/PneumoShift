@@ -175,9 +175,16 @@ def main() -> None:
             test_ds = ChestXrayDataset(test_df, images_dir=img_dir, transform=test_trans, headline_only=headline_only, cache_dir=cache_dir)
             test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
-            test_metrics = trainer.evaluate(test_loader)
-            save_json(test_metrics, run_out_dir / f"test_metrics_{arch}_{seed}.json")
-            logger.info("Test Evaluation: Macro AUROC: %.4f | Pneumonia AUROC: %.4f", test_metrics.get("val_macro_auroc", 0.0), test_metrics.get("val_pneumonia_auroc", 0.0))
+            eval_modes = cfg.get("eval", {}).get("eval_uncertainty_modes", ["uncertain_excluded"])
+            if not isinstance(eval_modes, list):
+                eval_modes = [eval_modes]
+
+            for idx, mode in enumerate(eval_modes):
+                test_metrics = trainer.evaluate(test_loader, uncertainty_mode=mode)
+                save_json(test_metrics, run_out_dir / f"test_metrics_{arch}_{seed}_{mode}.json")
+                if idx == 0:
+                    save_json(test_metrics, run_out_dir / f"test_metrics_{arch}_{seed}.json")
+                logger.info("Test Evaluation (%s): Macro AUROC: %.4f | Pneumonia AUROC: %.4f", mode, test_metrics.get("val_macro_auroc", 0.0), test_metrics.get("val_pneumonia_auroc", 0.0))
 
             bench_name = "pan_2019_nih" if "nih" in ds_name else "arasteh_2023_chexpert"
             try:
@@ -207,24 +214,27 @@ def main() -> None:
                     off_ds = ChestXrayDataset(off_df, images_dir=img_dir, transform=test_trans, headline_only=headline_only, cache_dir=cache_dir)
                     off_loader = DataLoader(off_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
-                    off_metrics = trainer.evaluate(off_loader)
-                    save_json(off_metrics, run_out_dir / f"official_val_metrics_{arch}_{seed}.json")
-                    logger.info("Official Val Evaluation: Macro AUROC: %.4f | Pneumonia AUROC: %.4f", off_metrics.get("val_macro_auroc", 0.0), off_metrics.get("val_pneumonia_auroc", 0.0))
+                    for idx, mode in enumerate(eval_modes):
+                        off_metrics = trainer.evaluate(off_loader, uncertainty_mode=mode)
+                        save_json(off_metrics, run_out_dir / f"official_val_metrics_{arch}_{seed}_{mode}.json")
+                        if idx == 0:
+                            save_json(off_metrics, run_out_dir / f"official_val_metrics_{arch}_{seed}.json")
+                        logger.info("Official Val Evaluation (%s): Macro AUROC: %.4f | Pneumonia AUROC: %.4f", mode, off_metrics.get("val_macro_auroc", 0.0), off_metrics.get("val_pneumonia_auroc", 0.0))
 
-                    try:
-                        off_bench = compare_against_benchmarks(
-                            evaluated_metrics=off_metrics,
-                            benchmark_name="irvin_2019_chexpert",
-                            headline_class=HEADLINE_CLASS,
-                        )
-                        save_json(off_bench, run_out_dir / f"official_val_benchmark_{arch}_{seed}.json")
-                        print("\n" + "=" * 70)
-                        print("CHEXPERT OFFICIAL VALIDATION BENCHMARK COMPARISON (IRVIN ET AL. 2019)")
-                        print("=" * 70)
-                        print(off_bench["table_markdown"])
-                        print("=" * 70 + "\n")
-                    except Exception as exc:
-                        logger.warning("Could not run official validation benchmark comparison: %s", exc)
+                        try:
+                            off_bench = compare_against_benchmarks(
+                                evaluated_metrics=off_metrics,
+                                benchmark_name="irvin_2019_chexpert",
+                                headline_class=HEADLINE_CLASS,
+                            )
+                            save_json(off_bench, run_out_dir / f"official_val_benchmark_{arch}_{seed}_{mode}.json")
+                            print("\n" + "=" * 70)
+                            print(f"CHEXPERT OFFICIAL VALIDATION BENCHMARK COMPARISON ({mode.upper()})")
+                            print("=" * 70)
+                            print(off_bench["table_markdown"])
+                            print("=" * 70 + "\n")
+                        except Exception as exc:
+                            logger.warning("Could not run official validation benchmark comparison: %s", exc)
         else:
             logger.warning("Test split CSV %s not found. Skipping test evaluation.", test_csv)
 

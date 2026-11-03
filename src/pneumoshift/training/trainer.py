@@ -101,7 +101,11 @@ class Trainer:
         return total_loss / max(len(self.train_loader), 1)
 
     @torch.no_grad()
-    def evaluate(self, loader: torch.utils.data.DataLoader) -> Dict[str, float]:
+    def evaluate(
+        self,
+        loader: torch.utils.data.DataLoader,
+        uncertainty_mode: str = "uncertain_excluded",
+    ) -> Dict[str, float]:
         self.model.eval()
         all_preds = []
         all_targets = []
@@ -131,13 +135,21 @@ class Trainer:
         # Calculate AUROCs and AUPRCs per class
         aurocs = []
         auprcs = []
-        metrics: Dict[str, float] = {"loss": total_loss / max(len(loader), 1)}
+        metrics: Dict[str, float] = {
+            "loss": total_loss / max(len(loader), 1),
+            "uncertainty_mode": uncertainty_mode,
+        }
 
         for idx, col in enumerate(self.label_cols):
-            # Mask out any ignored values (-1)
-            valid_mask = y_true[:, idx] != -1.0
-            col_true = y_true[valid_mask, idx]
-            col_pred = y_pred[valid_mask, idx]
+            # Process uncertain (-1) values according to uncertainty_mode
+            if uncertainty_mode == "uncertain_as_negative":
+                col_true = y_true[:, idx].copy()
+                col_true[col_true == -1.0] = 0.0
+                col_pred = y_pred[:, idx]
+            else:  # "uncertain_excluded"
+                valid_mask = y_true[:, idx] != -1.0
+                col_true = y_true[valid_mask, idx]
+                col_pred = y_pred[valid_mask, idx]
 
             col_key = col.lower().replace(" ", "_")
 
