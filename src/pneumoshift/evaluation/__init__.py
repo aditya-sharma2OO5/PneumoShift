@@ -53,6 +53,15 @@ from pneumoshift.evaluation.uncertainty_ablation import (
     generate_uncertainty_ablation_tables,
     run_uncertainty_policy_ablation_suite,
 )
+from pneumoshift.evaluation.multi_seed import (
+    compute_sample_ci_95,
+    paired_seed_significance_test,
+    aggregate_seed_metrics,
+    compare_multi_seed_architectures,
+    compare_multi_seed_uncertainty_policies,
+    generate_multi_seed_tables,
+    run_multi_seed_replication_suite,
+)
 from pneumoshift.evaluation.domain_gap import (
     train_domain_classifier_probe,
     compute_feature_mmd,
@@ -109,5 +118,12 @@ __all__ = [
     "quantify_threshold_transfer_collapse",
     "generate_uncertainty_ablation_tables",
     "run_uncertainty_policy_ablation_suite",
+    "compute_sample_ci_95",
+    "paired_seed_significance_test",
+    "aggregate_seed_metrics",
+    "compare_multi_seed_architectures",
+    "compare_multi_seed_uncertainty_policies",
+    "generate_multi_seed_tables",
+    "run_multi_seed_replication_suite",
 ]
 
