@@ -33,6 +33,12 @@ from pneumoshift.evaluation.cross_domain import (
     resolve_cross_domain_paths,
     validate_cross_domain_config,
 )
+from pneumoshift.evaluation.config_schemas import (
+    validate_model_config,
+    validate_train_config,
+    validate_arch_comparison_config,
+    validate_uncertainty_ablation_config,
+)
 from pneumoshift.evaluation.domain_gap import (
     train_domain_classifier_probe,
     compute_feature_mmd,
@@ -75,5 +81,9 @@ __all__ = [
     "resolve_cross_domain_paths",
     "extract_cross_domain_predictions",
     "compute_generalization_gap_report",
+    "validate_model_config",
+    "validate_train_config",
+    "validate_arch_comparison_config",
+    "validate_uncertainty_ablation_config",
 ]
 
