@@ -14,6 +14,15 @@ from pneumoshift.aggregation.collector import (
     save_run_manifest,
     validate_manifest_completeness,
 )
+from pneumoshift.aggregation.hypothesis_testing import (
+    adjust_multiple_comparisons,
+    benjamini_hochberg,
+    bonferroni_correction,
+    evaluate_study_hypotheses,
+    format_hypothesis_markdown_table,
+    holm_bonferroni,
+    save_hypothesis_report,
+)
 from pneumoshift.aggregation.config_schemas import (
     AggregationConfig,
     BootstrapCIResult,
@@ -48,6 +57,13 @@ __all__ = [
     "ingest_phase5_results",
     "save_run_manifest",
     "validate_manifest_completeness",
+    "adjust_multiple_comparisons",
+    "benjamini_hochberg",
+    "bonferroni_correction",
+    "evaluate_study_hypotheses",
+    "format_hypothesis_markdown_table",
+    "holm_bonferroni",
+    "save_hypothesis_report",
     "load_aggregation_config",
     "validate_aggregation_config",
     "validate_bootstrap_config",
