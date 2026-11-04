@@ -21,7 +21,16 @@ from pneumoshift.xai.sanity_checks import (
     format_sanity_check_markdown_table,
     save_sanity_check_report,
 )
-from pneumoshift.xai.stability import compute_attribution_stability
+from pneumoshift.xai.stability import (
+    compute_binarized_iou,
+    compute_similarity_metrics,
+    compute_attribution_stability,
+    compare_inter_seed_stability,
+    compare_inter_architecture_stability,
+    evaluate_cohort_stability,
+    format_stability_markdown_table,
+    save_stability_report,
+)
 from pneumoshift.xai.localization import compute_pointing_game_and_iou
 from pneumoshift.xai.lung_mask import compute_in_lung_attribution_ratio
 from pneumoshift.xai.shortcut_analysis import compute_shortcut_energy_ratio
@@ -30,6 +39,7 @@ from pneumoshift.xai.config_schemas import (
     validate_faithfulness_config,
     validate_sanity_checks_config,
     validate_localization_config,
+    validate_stability_config,
 )
 
 __all__ = [
@@ -48,7 +58,14 @@ __all__ = [
     "evaluate_cohort_sanity_checks",
     "format_sanity_check_markdown_table",
     "save_sanity_check_report",
+    "compute_binarized_iou",
+    "compute_similarity_metrics",
     "compute_attribution_stability",
+    "compare_inter_seed_stability",
+    "compare_inter_architecture_stability",
+    "evaluate_cohort_stability",
+    "format_stability_markdown_table",
+    "save_stability_report",
     "compute_pointing_game_and_iou",
     "compute_in_lung_attribution_ratio",
     "compute_shortcut_energy_ratio",
@@ -56,5 +73,5 @@ __all__ = [
     "validate_faithfulness_config",
     "validate_sanity_checks_config",
     "validate_localization_config",
+    "validate_stability_config",
 ]
-

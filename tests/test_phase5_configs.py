@@ -9,6 +9,7 @@ from pneumoshift.xai.config_schemas import (
     validate_faithfulness_config,
     validate_sanity_checks_config,
     validate_localization_config,
+    validate_stability_config,
     VALID_XAI_METHODS,
     VALID_BASELINE_MODES,
     VALID_RANDOMIZE_MODES,
@@ -56,6 +57,15 @@ class TestPhase5ConfigLoading:
         validated = validate_localization_config(cfg)
         assert len(validated["iou_thresholds"]) > 0
         assert len(validated["binarize_thresholds"]) > 0
+
+    def test_stability_yaml_valid(self):
+        cfg_path = CONFIGS_DIR / "stability.yaml"
+        assert cfg_path.is_file(), f"Missing config file: {cfg_path}"
+        with open(cfg_path, "r") as f:
+            cfg = yaml.safe_load(f)
+        validated = validate_stability_config(cfg)
+        assert validated["experiment_name"] == "attribution_stability_and_reproducibility"
+        assert validated["perturbations"]["num_perturbations"] > 0
 
 
 class TestXAIConfigValidation:
@@ -196,3 +206,40 @@ class TestLocalizationConfigValidation:
         cfg = {"experiment_name": "t", "shortcut_analysis": {"border_margin_fraction": 0.6}}
         with pytest.raises(ValueError, match="border_margin_fraction must be in range"):
             validate_localization_config(cfg)
+
+
+class TestStabilityConfigValidation:
+    """Tests boundary assertions for stability configs."""
+
+    def test_valid_stability_config(self):
+        cfg = {
+            "experiment_name": "stab_test",
+            "perturbations": {
+                "num_perturbations": 5,
+                "rotation_degrees": 5.0,
+                "brightness_factor": 0.05,
+                "translation_percent": 0.05,
+            },
+            "inter_seed": {
+                "seeds": [42, 1337],
+                "binarize_threshold": 0.5,
+            },
+        }
+        res = validate_stability_config(cfg)
+        assert res["experiment_name"] == "stab_test"
+
+    def test_invalid_rotation_raises(self):
+        cfg = {"experiment_name": "t", "perturbations": {"rotation_degrees": 50.0}}
+        with pytest.raises(ValueError, match="rotation_degrees must be in range"):
+            validate_stability_config(cfg)
+
+    def test_invalid_brightness_raises(self):
+        cfg = {"experiment_name": "t", "perturbations": {"brightness_factor": 1.2}}
+        with pytest.raises(ValueError, match="brightness_factor must be in range"):
+            validate_stability_config(cfg)
+
+    def test_invalid_seeds_raises(self):
+        cfg = {"experiment_name": "t", "inter_seed": {"seeds": ["bad_seed"]}}
+        with pytest.raises(ValueError, match="seeds must be a list of integers"):
+            validate_stability_config(cfg)
+
