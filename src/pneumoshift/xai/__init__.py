@@ -13,7 +13,14 @@ from pneumoshift.xai.faithfulness import (
     format_faithfulness_markdown_table,
     save_faithfulness_report,
 )
-from pneumoshift.xai.sanity_checks import run_parameter_randomization_test
+from pneumoshift.xai.sanity_checks import (
+    compute_map_similarity,
+    randomize_model_weights,
+    run_parameter_randomization_test,
+    evaluate_cohort_sanity_checks,
+    format_sanity_check_markdown_table,
+    save_sanity_check_report,
+)
 from pneumoshift.xai.stability import compute_attribution_stability
 from pneumoshift.xai.localization import compute_pointing_game_and_iou
 from pneumoshift.xai.lung_mask import compute_in_lung_attribution_ratio
@@ -35,7 +42,12 @@ __all__ = [
     "compare_cross_domain_faithfulness",
     "format_faithfulness_markdown_table",
     "save_faithfulness_report",
+    "compute_map_similarity",
+    "randomize_model_weights",
     "run_parameter_randomization_test",
+    "evaluate_cohort_sanity_checks",
+    "format_sanity_check_markdown_table",
+    "save_sanity_check_report",
     "compute_attribution_stability",
     "compute_pointing_game_and_iou",
     "compute_in_lung_attribution_ratio",
