@@ -1,5 +1,10 @@
 """Aggregation, bootstrapping, hypothesis testing, and master tables for PneumoShift (Phase 6)."""
 
+from pneumoshift.aggregation.bootstrap_engine import (
+    PatientClusteredBootstrap,
+    compute_cohort_bootstrap_summary,
+    save_bootstrap_report,
+)
 from pneumoshift.aggregation.collector import (
     build_synthetic_manifest,
     collect_all_results,
@@ -33,6 +38,9 @@ __all__ = [
     "BootstrapCIResult",
     "HypothesisTestRecord",
     "MasterTableSpec",
+    "PatientClusteredBootstrap",
+    "compute_cohort_bootstrap_summary",
+    "save_bootstrap_report",
     "build_synthetic_manifest",
     "collect_all_results",
     "ingest_phase3_results",
