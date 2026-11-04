@@ -31,9 +31,25 @@ from pneumoshift.xai.stability import (
     format_stability_markdown_table,
     save_stability_report,
 )
-from pneumoshift.xai.localization import compute_pointing_game_and_iou
-from pneumoshift.xai.lung_mask import compute_in_lung_attribution_ratio
-from pneumoshift.xai.shortcut_analysis import compute_shortcut_energy_ratio
+from pneumoshift.xai.localization import (
+    compute_pointing_game_and_iou,
+    evaluate_image_localization,
+    evaluate_cohort_localization,
+    compare_cross_domain_localization,
+)
+from pneumoshift.xai.lung_mask import (
+    generate_anatomical_lung_mask,
+    extract_adaptive_lung_mask,
+    compute_in_lung_attribution_ratio,
+    evaluate_cohort_lung_plausibility,
+)
+from pneumoshift.xai.shortcut_analysis import (
+    compute_shortcut_energy_ratio,
+    evaluate_cohort_shortcut_energy,
+    compare_shortcut_escalation,
+    format_localization_and_shortcuts_table,
+    save_localization_and_shortcuts_report,
+)
 from pneumoshift.xai.config_schemas import (
     validate_xai_config,
     validate_faithfulness_config,
@@ -67,8 +83,18 @@ __all__ = [
     "format_stability_markdown_table",
     "save_stability_report",
     "compute_pointing_game_and_iou",
+    "evaluate_image_localization",
+    "evaluate_cohort_localization",
+    "compare_cross_domain_localization",
+    "generate_anatomical_lung_mask",
+    "extract_adaptive_lung_mask",
     "compute_in_lung_attribution_ratio",
+    "evaluate_cohort_lung_plausibility",
     "compute_shortcut_energy_ratio",
+    "evaluate_cohort_shortcut_energy",
+    "compare_shortcut_escalation",
+    "format_localization_and_shortcuts_table",
+    "save_localization_and_shortcuts_report",
     "validate_xai_config",
     "validate_faithfulness_config",
     "validate_sanity_checks_config",
