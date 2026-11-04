@@ -1,5 +1,14 @@
 """Aggregation, bootstrapping, hypothesis testing, and master tables for PneumoShift (Phase 6)."""
 
+from pneumoshift.aggregation.collector import (
+    build_synthetic_manifest,
+    collect_all_results,
+    ingest_phase3_results,
+    ingest_phase4_results,
+    ingest_phase5_results,
+    save_run_manifest,
+    validate_manifest_completeness,
+)
 from pneumoshift.aggregation.config_schemas import (
     AggregationConfig,
     BootstrapCIResult,
@@ -24,6 +33,13 @@ __all__ = [
     "BootstrapCIResult",
     "HypothesisTestRecord",
     "MasterTableSpec",
+    "build_synthetic_manifest",
+    "collect_all_results",
+    "ingest_phase3_results",
+    "ingest_phase4_results",
+    "ingest_phase5_results",
+    "save_run_manifest",
+    "validate_manifest_completeness",
     "load_aggregation_config",
     "validate_aggregation_config",
     "validate_bootstrap_config",
