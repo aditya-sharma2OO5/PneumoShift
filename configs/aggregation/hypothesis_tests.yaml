@@ -1,0 +1,67 @@
+# Formal Hypothesis Testing Specifications (Phase 6)
+experiment_name: "hypothesis_testing_suite"
+description: "Specification of primary and secondary research hypotheses evaluated with patient-clustered testing and FDR correction"
+
+hypotheses:
+  - id: "H1"
+    name: "Generalization_Degradation"
+    description: "Cross-dataset distribution shift induces a statistically significant decline in AUROC."
+    null_hypothesis: "Delta_AUROC <= 0 (in-domain AUROC <= cross-domain AUROC)"
+    alternative: "greater"
+    primary_metric: "auroc"
+    test_type: "paired_bootstrap"
+    alpha: 0.05
+    target_models:
+      - "densenet121"
+      - "efficientnet_b0"
+    shifts:
+      - "nih_to_chexpert"
+      - "chexpert_to_nih"
+
+  - id: "H2"
+    name: "Calibration_Escalation"
+    description: "Cross-dataset shift significantly elevates Expected Calibration Error (ECE) and Brier score."
+    null_hypothesis: "Delta_ECE <= 0 (cross-domain ECE <= in-domain ECE)"
+    alternative: "greater"
+    primary_metric: "ece"
+    test_type: "paired_bootstrap"
+    alpha: 0.05
+    target_models:
+      - "densenet121"
+      - "efficientnet_b0"
+
+  - id: "H3"
+    name: "Threshold_Transfer_Discordance"
+    description: "Source-optimal decision thresholds suffer significant sensitivity or specificity collapse out-of-domain."
+    null_hypothesis: "Delta_F1 <= 0 (transferred F1 >= target-optimal F1)"
+    alternative: "greater"
+    primary_metric: "f1_score"
+    test_type: "two_sample_bootstrap"
+    alpha: 0.05
+    target_models:
+      - "densenet121"
+      - "efficientnet_b0"
+
+  - id: "H4"
+    name: "Architecture_Inductive_Bias"
+    description: "EfficientNet-B0 exhibits a significantly narrower cross-domain AUROC gap than DenseNet121."
+    null_hypothesis: "Gap_EfficientNet >= Gap_DenseNet"
+    alternative: "less"
+    primary_metric: "generalization_gap"
+    test_type: "wilcoxon"
+    alpha: 0.05
+    target_models:
+      - "comparison"
+
+  - id: "H5"
+    name: "Explainability_Shortcut_Escalation"
+    description: "Cross-domain transfer significantly degrades attribution faithfulness and elevates peripheral shortcut energy."
+    null_hypothesis: "Shortcut_Transferred <= Shortcut_InDomain"
+    alternative: "greater"
+    primary_metric: "shortcut_energy_ratio"
+    test_type: "mann_whitney"
+    alpha: 0.05
+    target_models:
+      - "densenet121"
+      - "efficientnet_b0"
+

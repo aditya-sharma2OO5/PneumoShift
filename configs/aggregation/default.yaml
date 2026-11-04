@@ -1,0 +1,51 @@
+# Default Master Results Aggregation Configuration (Phase 6)
+experiment_name: "master_results_aggregation"
+description: "Master aggregation and meta-analysis across all PneumoShift experimental phases"
+
+# Clustered Bootstrap Parameters
+bootstrap:
+  n_resamples: 1000
+  confidence_level: 0.95
+  seed: 42
+  cluster_by: "patient_id"
+  method: "patient_clustered"
+  min_samples_per_cluster: 1
+  strata: null
+
+# Statistical Hypothesis Testing & Multi-Comparison Corrections
+hypothesis_testing:
+  fdr_alpha: 0.05
+  family_wise_alpha: 0.05
+  correction_methods:
+    - "benjamini_hochberg"
+    - "bonferroni"
+    - "holm"
+  default_test_type: "paired_bootstrap"
+  valid_test_types:
+    - "paired_bootstrap"
+    - "two_sample_bootstrap"
+    - "delong"
+    - "wilcoxon"
+    - "mann_whitney"
+    - "fisher_exact"
+    - "paired_t_test"
+
+# Source Data & Artifact Paths
+paths:
+  runs_dir: "results/runs"
+  cross_domain_dir: "results/tables/cross_domain"
+  phase4_dir: "results/tables/phase4_ablations"
+  xai_dir: "results/tables/xai"
+  output_dir: "results/tables/master"
+
+# Export Settings
+exports:
+  formats:
+    - "csv"
+    - "json"
+    - "md"
+    - "tex"
+  precision: 4
+  latex_booktabs: true
+  table_prefix: "table"
+
