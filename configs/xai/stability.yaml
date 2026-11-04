@@ -1,0 +1,26 @@
+# Attribution Stability and Inter-Seed Reproducibility Configuration
+experiment_name: "attribution_stability_and_reproducibility"
+
+method: "gradcam"
+target_class: "Pneumonia"
+target_class_idx: 5
+
+perturbations:
+  num_perturbations: 5
+  rotation_degrees: 5.0
+  brightness_factor: 0.05
+  translation_percent: 0.05
+
+inter_seed:
+  seeds: [42, 1337, 2024]
+  binarize_threshold: 0.5
+
+architectures_to_compare:
+  - "densenet121"
+  - "efficientnet_b0"
+
+max_samples_to_audit: 50
+
+output_dir: "results/tables/xai"
+figures_dir: "results/figures/xai/stability"
+

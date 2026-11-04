@@ -66,6 +66,8 @@ def validate_xai_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
     # Validate sub-sections if present
     if "faithfulness" in cfg:
         validate_faithfulness_config(cfg["faithfulness"], standalone=False)
+    if "stability" in cfg:
+        validate_stability_config(cfg["stability"], standalone=False)
     if "sanity_checks" in cfg:
         validate_sanity_checks_config(cfg["sanity_checks"], standalone=False)
     if "localization" in cfg:
@@ -200,4 +202,51 @@ def validate_localization_config(cfg: Dict[str, Any], standalone: bool = True) -
         raise ValueError(f"corner_margin_fraction must be in range (0.0, 0.5), got {corner_frac}")
 
     return cfg
+
+
+def validate_stability_config(cfg: Dict[str, Any], standalone: bool = True) -> Dict[str, Any]:
+    """Validates attribution stability and reproducibility configuration.
+
+    Args:
+        cfg: Dictionary containing stability parameters.
+        standalone: Whether this is loaded as an independent file.
+
+    Returns:
+        Validated configuration dictionary.
+
+    Raises:
+        ValueError: If parameters are invalid or out of bounds.
+    """
+    if standalone and "experiment_name" not in cfg:
+        raise ValueError("Stability config missing mandatory key: 'experiment_name'")
+
+    # Perturbations section (support either nested under 'perturbations' or flat in cfg)
+    pert = cfg.get("perturbations", cfg)
+    num_pert = pert.get("num_perturbations", 5)
+    if not isinstance(num_pert, int) or num_pert <= 0:
+        raise ValueError(f"num_perturbations must be a positive integer, got {num_pert}")
+
+    rot = pert.get("rotation_degrees", 5.0)
+    if not isinstance(rot, (int, float)) or not (0.0 <= rot <= 45.0):
+        raise ValueError(f"rotation_degrees must be in range [0.0, 45.0], got {rot}")
+
+    bf = pert.get("brightness_factor", 0.05)
+    if not isinstance(bf, (int, float)) or not (0.0 <= bf < 1.0):
+        raise ValueError(f"brightness_factor must be in range [0.0, 1.0), got {bf}")
+
+    tf = pert.get("translation_percent", 0.05)
+    if not isinstance(tf, (int, float)) or not (0.0 <= tf < 0.5):
+        raise ValueError(f"translation_percent must be in range [0.0, 0.5), got {tf}")
+
+    inter_seed = cfg.get("inter_seed", {})
+    if isinstance(inter_seed, dict) and inter_seed:
+        seeds = inter_seed.get("seeds", [42, 1337, 2024])
+        if not isinstance(seeds, list) or not all(isinstance(s, int) for s in seeds):
+            raise ValueError(f"seeds must be a list of integers, got {seeds}")
+        bin_thresh = inter_seed.get("binarize_threshold", 0.5)
+        if not isinstance(bin_thresh, (int, float)) or not (0.0 < bin_thresh < 1.0):
+            raise ValueError(f"binarize_threshold must be in range (0.0, 1.0), got {bin_thresh}")
+
+    return cfg
+
 
