@@ -135,12 +135,38 @@ def build_model(
     return model
 
 
-def get_target_layer_for_xai(model: nn.Module, architecture: str) -> nn.Module:
-    """Returns the final convolutional layer targeted for Grad-CAM.
+def get_target_layer_for_xai(
+    model: nn.Module,
+    architecture: str,
+    layer_name: Optional[str] = None,
+) -> nn.Module:
+    """Returns the convolutional layer targeted for Grad-CAM.
 
-    DenseNet121: final norm/dense block layer (features.norm5 or features[-1])
-    EfficientNet: final conv feature map (features[-1])
+    Args:
+        model: PneumoShiftModel or PyTorch module.
+        architecture: Architecture string ('densenet121', 'efficientnet_b0', etc.).
+        layer_name: Optional explicit submodule name (e.g. 'features.denseblock4' or 'features.8').
+
+    Returns:
+        Target nn.Module layer for forward/backward activation hook registration.
     """
+    if layer_name:
+        named = dict(model.named_modules())
+        if layer_name in named:
+            return named[layer_name]
+        for prefix in ["backbone.", "backbone.features.", "features."]:
+            cand = f"{prefix}{layer_name}"
+            if cand in named:
+                return named[cand]
+            if layer_name.startswith("features."):
+                cand_sub = f"backbone.{layer_name}"
+                if cand_sub in named:
+                    return named[cand_sub]
+        try:
+            return model.get_submodule(layer_name)
+        except (AttributeError, KeyError):
+            pass
+
     arch = architecture.lower()
     if isinstance(model, PneumoShiftModel):
         backbone = model.backbone
@@ -148,6 +174,8 @@ def get_target_layer_for_xai(model: nn.Module, architecture: str) -> nn.Module:
         backbone = getattr(model, "features", model)
 
     if "densenet" in arch:
+        if hasattr(backbone, "denseblock4"):
+            return backbone.denseblock4
         if hasattr(backbone, "norm5"):
             return backbone.norm5
         return list(backbone.children())[-1]

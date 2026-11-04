@@ -1,6 +1,11 @@
 """Explainability (XAI) suite: Grad-CAM, faithfulness, sanity checks, stability, localization, and shortcuts."""
 
-from pneumoshift.xai.gradcam import GradCAMExplainer
+from pneumoshift.xai.gradcam import (
+    GradCAMExplainer,
+    overlay_cam_on_image,
+    save_cam_visualization,
+    explain_image_with_model,
+)
 from pneumoshift.xai.faithfulness import compute_deletion_insertion_curves
 from pneumoshift.xai.sanity_checks import run_parameter_randomization_test
 from pneumoshift.xai.stability import compute_attribution_stability
@@ -16,6 +21,9 @@ from pneumoshift.xai.config_schemas import (
 
 __all__ = [
     "GradCAMExplainer",
+    "overlay_cam_on_image",
+    "save_cam_visualization",
+    "explain_image_with_model",
     "compute_deletion_insertion_curves",
     "run_parameter_randomization_test",
     "compute_attribution_stability",
