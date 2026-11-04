@@ -1,0 +1,47 @@
+# Figure 2: Multi-Panel ROC & PR Curves Configuration
+# Compares In-Domain vs Cross-Domain discrimination with bootstrap 95% confidence bands
+
+figure_id: "fig2_roc_pr_curves"
+title: "Cross-Domain Generalization & Discrimination Collapse"
+layout:
+  preset: "double_column"
+  nrows: 1
+  ncols: 2
+  sharey: false
+
+roc_panel:
+  title: "Receiver Operating Characteristic (ROC)"
+  xlabel: "False Positive Rate (1 - Specificity)"
+  ylabel: "True Positive Rate (Sensitivity)"
+  ci_band: true
+  ci_band_alpha: 0.15
+  diagonal_reference: true
+  diagonal_color: "#7F7F7F"
+  diagonal_style: "--"
+
+pr_panel:
+  title: "Precision-Recall (PR) Characteristic"
+  xlabel: "Recall (Sensitivity)"
+  ylabel: "Precision (Positive Predictive Value)"
+  ci_band: true
+  ci_band_alpha: 0.15
+  no_skill_reference: true
+  no_skill_style: ":"
+
+operating_points:
+  youden_marker: "o"
+  youden_size: 7.0
+  sens90_marker: "^"
+  sens90_size: 7.0
+  show_labels: true
+
+models:
+  densenet121:
+    in_color: "#0173B2"
+    cross_color: "#DE8F05"
+    linestyle: "-"
+  efficientnet_b0:
+    in_color: "#029E73"
+    cross_color: "#CC78BC"
+    linestyle: "--"
+

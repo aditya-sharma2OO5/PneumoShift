@@ -1,0 +1,45 @@
+# Figure 4: Operating Decision Threshold Transfer Discordance Configuration
+# Visualizes diagnostic trade-offs and F1 collapse under unadjusted threshold transfer
+
+figure_id: "fig4_threshold_transfer_discordance"
+title: "Clinical Operating Decision Threshold Transfer Discordance"
+layout:
+  preset: "one_and_half_column"
+  nrows: 1
+  ncols: 2
+  sharey: true
+
+threshold_sweep:
+  min_tau: 0.05
+  max_tau: 0.95
+  n_points: 100
+
+metrics:
+  f1:
+    label: "F1 Score"
+    color: "#0173B2"
+    style: "-"
+    linewidth: 2.0
+  sensitivity:
+    label: "Sensitivity (TPR)"
+    color: "#029E73"
+    style: "--"
+    linewidth: 1.6
+  specificity:
+    label: "Specificity (TNR)"
+    color: "#CC78BC"
+    style: "-."
+    linewidth: 1.6
+
+operating_markers:
+  source_youden:
+    label: "Source Youden J Cutoff"
+    color: "#D55E00"
+    style: ":"
+    linewidth: 1.8
+  oracle_target:
+    label: "Target Optimal Cutoff"
+    color: "#029E73"
+    style: "--"
+    linewidth: 1.8
+

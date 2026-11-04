@@ -1,0 +1,36 @@
+# Figure 3: 4-Regime Reliability & Calibration Diagrams Configuration
+# Evaluates probability calibration breakdown and oracle recalibration
+
+figure_id: "fig3_calibration_reliability"
+title: "Probability Calibration Dynamics Across 4 Deployment Regimes"
+layout:
+  preset: "double_column"
+  nrows: 1
+  ncols: 4
+  sharey: true
+
+calibration:
+  n_bins: 10
+  strategy: "uniform" # Equal-width binning
+  diagonal_reference: true
+  diagonal_color: "#7F7F7F"
+  diagonal_style: "--"
+  gap_shading: true
+  gap_alpha: 0.20
+  show_histogram_inset: true
+  inset_height_ratio: 0.25
+
+regimes:
+  - id: "in_domain"
+    label: "1. In-Domain Baseline"
+    color: "#0173B2"
+  - id: "cross_uncal"
+    label: "2. Cross-Domain Uncalibrated"
+    color: "#DE8F05"
+  - id: "source_scaled"
+    label: "3. Source Temp Scaled"
+    color: "#CC78BC"
+  - id: "oracle_recal"
+    label: "4. Oracle Recalibrated"
+    color: "#029E73"
+

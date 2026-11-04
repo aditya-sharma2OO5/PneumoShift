@@ -1,0 +1,40 @@
+# Figure 6: Explainability Saliency Audit, Faithfulness Dynamics & Shortcut Quantification Configuration
+# Multi-panel visualization of Grad-CAM heatmaps, Deletion/Insertion curves, Adebayo sanity, and shortcut ratios
+
+figure_id: "fig6_explainability_and_shortcuts"
+title: "Explainability Saliency Audit, Faithfulness Dynamics & Shortcut Escalation"
+layout:
+  preset: "double_column"
+  nrows: 2
+  ncols: 2
+
+saliency_heatmaps:
+  colormap: "turbo"
+  alpha: 0.50
+  interpolation: "bilinear"
+  bbox_color: "#00FF00"
+  bbox_linewidth: 2.0
+
+faithfulness:
+  step_min: 0.05
+  step_max: 0.50
+  step_size: 0.05
+  insertion_color: "#029E73"
+  deletion_color: "#D55E00"
+  show_auc_shading: true
+  auc_alpha: 0.15
+
+sanity_checks:
+  metric: "spearman"
+  reference_threshold: 0.25 # Adebayo pass criterion (Spearman rho < 0.25)
+  threshold_color: "#7F7F7F"
+  decay_color: "#0173B2"
+  marker: "o"
+
+shortcuts:
+  in_domain_color: "#0173B2"
+  cross_domain_color: "#DE8F05"
+  central_clinical_color: "#029E73"
+  peripheral_shortcut_color: "#D55E00"
+  bar_width: 0.35
+

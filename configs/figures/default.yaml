@@ -1,0 +1,46 @@
+# PneumoShift Publication Figures Global Configuration
+# Adheres to medical machine learning publication standards (Lancet Digital Health, Nature MI)
+
+style:
+  font_family: "sans-serif"
+  font_sans_serif:
+    - "DejaVu Sans"
+    - "Arial"
+    - "Helvetica"
+  font_size_title: 11
+  font_size_label: 10
+  font_size_tick: 8
+  font_size_legend: 8
+  palette: "colorblind" # Colorblind-safe palette (Okabe-Ito / Seaborn colorblind)
+  primary_color: "#0173B2" # In-domain baseline (Navy blue)
+  shift_color: "#DE8F05" # Cross-domain transferred (Amber orange)
+  secondary_color: "#029E73" # Target oracle / optimal (Forest green)
+  accent_color: "#D55E00" # Error / degradation / shortcut (Crimson red)
+  neutral_color: "#7F7F7F" # Reference diagonal / background (Neutral gray)
+  grid_alpha: 0.30
+  line_width: 1.8
+  marker_size: 6.0
+  use_latex: false # Kept false for portability without local TeX installation
+
+dimensions:
+  single_column:
+    width: 3.5
+    height: 3.2
+  one_and_half_column:
+    width: 5.5
+    height: 4.0
+  double_column:
+    width: 7.2
+    height: 4.8
+
+export:
+  output_dir: "results/figures"
+  dpi: 300
+  formats:
+    - "pdf"
+    - "svg"
+    - "png"
+  bbox_inches: "tight"
+  transparent: false
+  facecolor: "white"
+
