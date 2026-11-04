@@ -226,4 +226,5 @@ __marimo__/
 /results/tables/cross_domain/
 /results/tables/phase4_ablations/
 /results/tables/xai/
+/results/tables/master/
 /results/tables/*.json
