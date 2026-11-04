@@ -325,11 +325,15 @@ def save_sanity_check_report(
     filename_prefix: str = "sanity_checks_adebayo",
 ) -> Tuple[Path, Path]:
     """Saves sanity check benchmark results as structured JSON and formatted Markdown."""
-    out_dir = Path(output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    json_path = out_dir / f"{filename_prefix}.json"
-    md_path = out_dir / f"{filename_prefix}.md"
+    out_path = Path(output_dir)
+    if out_path.suffix == ".json":
+        json_path = out_path
+        md_path = out_path.with_suffix(".md")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        out_path.mkdir(parents=True, exist_ok=True)
+        json_path = out_path / f"{filename_prefix}.json"
+        md_path = out_path / f"{filename_prefix}.md"
 
     save_json(benchmark_results, json_path)
     md_content = format_sanity_check_markdown_table(benchmark_results)

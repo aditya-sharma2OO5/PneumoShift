@@ -288,8 +288,17 @@ def format_faithfulness_markdown_table(
     title: str = "Attribution Faithfulness Dynamics (Petsiuk et al., 2018)",
 ) -> str:
     """Formats faithfulness comparison results into a publication-ready Markdown table."""
-    if isinstance(comparisons, dict) and "model_name" in comparisons:
-        comparisons = [comparisons]
+    comp_list: List[Dict[str, Any]] = []
+    if isinstance(comparisons, dict):
+        if "comparison" in comparisons:
+            comp_obj = comparisons["comparison"]
+            comp_list = [comp_obj] if isinstance(comp_obj, dict) else comp_obj
+        elif "model_name" in comparisons:
+            comp_list = [comparisons]
+        else:
+            comp_list = [v for v in comparisons.values() if isinstance(v, dict) and "model_name" in v]
+    elif isinstance(comparisons, list):
+        comp_list = comparisons
 
     lines = [
         f"### {title}",
@@ -298,19 +307,19 @@ def format_faithfulness_markdown_table(
         "| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
 
-    for comp in comparisons:
-        m_name = comp["model_name"]
-        shift = comp["shift_name"]
-        mode = comp["baseline_mode"]
-        in_d = comp["in_domain"]
-        cr_d = comp["cross_domain"]
-        deltas = comp["deltas"]
+    for comp in comp_list:
+        m_name = comp.get("model_name", "Model")
+        shift = comp.get("shift_name", "In_to_Cross")
+        mode = comp.get("baseline_mode", "zero")
+        in_d = comp.get("in_domain", {})
+        cr_d = comp.get("cross_domain", {})
+        deltas = comp.get("deltas", {})
 
         lines.append(
             f"| **{m_name}** | {shift} | `{mode}` | "
-            f"{in_d['deletion_auc']:.4f} | {in_d['insertion_auc']:.4f} | **{in_d['faithfulness_ratio']:.2f}x** | "
-            f"{cr_d['deletion_auc']:.4f} | {cr_d['insertion_auc']:.4f} | **{cr_d['faithfulness_ratio']:.2f}x** | "
-            f"{deltas['delta_faithfulness_ratio']:+.2f} | **{deltas['faithfulness_degradation_percent']:.1f}%** |"
+            f"{in_d.get('deletion_auc', 0.0):.4f} | {in_d.get('insertion_auc', 0.0):.4f} | **{in_d.get('faithfulness_ratio', 0.0):.2f}x** | "
+            f"{cr_d.get('deletion_auc', 0.0):.4f} | {cr_d.get('insertion_auc', 0.0):.4f} | **{cr_d.get('faithfulness_ratio', 0.0):.2f}x** | "
+            f"{deltas.get('delta_faithfulness_ratio', 0.0):+.2f} | **{deltas.get('faithfulness_degradation_percent', 0.0):.1f}%** |"
         )
 
     lines.append("")
@@ -328,11 +337,15 @@ def save_faithfulness_report(
     filename_prefix: str = "faithfulness_dynamics",
 ) -> Tuple[Path, Path]:
     """Saves faithfulness benchmark results as structured JSON and formatted Markdown."""
-    out_dir = Path(output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    json_path = out_dir / f"{filename_prefix}.json"
-    md_path = out_dir / f"{filename_prefix}.md"
+    out_path = Path(output_dir)
+    if out_path.suffix == ".json":
+        json_path = out_path
+        md_path = out_path.with_suffix(".md")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        out_path.mkdir(parents=True, exist_ok=True)
+        json_path = out_path / f"{filename_prefix}.json"
+        md_path = out_path / f"{filename_prefix}.md"
 
     save_json(benchmark_results, json_path)
     md_content = format_faithfulness_markdown_table(benchmark_results)
