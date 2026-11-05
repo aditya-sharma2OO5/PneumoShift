@@ -38,22 +38,32 @@ PneumoShift/
 │   ├── train/              # Training & optimizer parameters
 │   ├── eval/               # Evaluation & bootstrap metrics
 │   └── xai/                # Grad-CAM, faithfulness & shortcut analysis
-├── docs/                   # Documentation & protocol notes
-│   ├── ASSUMPTIONS.md      # Methodological decisions & assumptions
+├── docs/                   # Documentation, manuscript & reports
+│   ├── MANUSCRIPT.md       # Camera-ready academic research manuscript
+│   ├── DATA_GUIDE.md       # Dataset acquisition & folder organization
 │   ├── METHODS.md          # Formal statistical & experimental protocol
-│   └── DATA_GUIDE.md       # Dataset acquisition & folder organization
-├── notebooks/              # Analysis & interactive exploratory notebooks
-│   ├── 01_data_audit.ipynb
-│   ├── 02_results_overview.ipynb
-│   └── 03_xai_gallery.ipynb
+│   ├── ASSUMPTIONS.md      # Methodological decisions & assumptions
+│   ├── PHASE3_REPORT.md    # Cross-domain shift evaluation report
+│   ├── PHASE4_REPORT.md    # Architecture & uncertainty ablation report
+│   ├── PHASE5_REPORT.md    # Explainability & shortcut audit report
+│   └── PHASE6_REPORT.md    # Master results aggregation & meta-analysis
+├── reports/                # Standalone interactive deliverables
+│   └── gallery.html        # Zero-dependency interactive HTML dashboard
 ├── results/                # Output artifacts (CSVs, figures, tables, logs)
+│   ├── figures/            # Canonical Figures 1-6 (.pdf, .svg, .png 300 DPI)
+│   └── tables/master/      # Master Tables 1-6 (.csv, .json, .md, .tex)
 ├── scripts/                # Command-line entry points
+│   ├── reproduce_all.py    # Master one-click end-to-end reproduction CLI
+│   ├── setup_real_data.py  # Automated dataset ingestion & extraction CLI
+│   ├── generate_figures.py # Publication figures rendering engine
+│   ├── generate_gallery.py # Standalone HTML dashboard generator
+│   ├── verify_phase7_gate.py# Automated Phase 7 Quality Gate CLI
 │   ├── prepare_splits.py   # Patient-stratified split generator
 │   ├── train.py            # Model training entry point
-│   ├── evaluate.py         # Evaluation & calibration benchmark
-│   ├── run_xai.py          # Grad-CAM, faithfulness & stability pipeline
-│   ├── aggregate_results.py# Master tables & statistical significance
-│   └── make_figures.py     # Publication-grade figures
+│   ├── evaluate_cross_domain.py # Unified Phase 3 evaluation CLI
+│   ├── run_phase4_ablations.py # Unified Phase 4 ablations CLI
+│   ├── run_phase5_xai.py   # Unified Phase 5 explainability CLI
+│   └── aggregate_results.py# Master tables & statistical meta-analysis
 ├── src/pneumoshift/        # Core library source code
 │   ├── data/               # Data loaders, harmonization, splits, transforms
 │   ├── models/             # Architecture factory and classifier heads
@@ -104,7 +114,7 @@ pytest tests/test_smoke.py
 - [x] **P4 Architecture & Uncertainty Ablation**: EfficientNet-B0 comparison (generalization gap narrowing, $D=1280$ vs $1024$ linear domain probe, MMD shift), CheXpert label uncertainty ablations (U-Zeros vs U-Ones vs U-Ignore, over-prediction ratio, specificity collapse), and 3-seed statistical significance replication (seeds 42, 1337, 2024; paired t-test and Wilcoxon; see [`docs/PHASE4_REPORT.md`](docs/PHASE4_REPORT.md)).
 - [x] **P5 Explainability Suite**: Multi-architecture Grad-CAM attribution, deletion/insertion faithfulness curves (FDR ratio), Adebayo parameter randomization sanity checks (94.4% collapse), multi-seed attribution reproducibility (seeds 42, 1337, 2024), ground-truth BBox pointing game (82.5% in-domain vs 38.0% transferred), and anatomical lung-field plausibility vs peripheral shortcut escalation (+288.6% border/marker energy; see [`docs/PHASE5_REPORT.md`](docs/PHASE5_REPORT.md)).
 - [x] **P6 Results Aggregation**: Consolidated results aggregation, patient-clustered non-parametric bootstrap uncertainty quantification ($B=1000, 95\%$ CIs), Benjamini-Hochberg False Discovery Rate control ($q=0.05$), and 6 master publication tables exported across 4 formats (.csv, .json, .md, .tex with booktabs) (see [`docs/PHASE6_REPORT.md`](docs/PHASE6_REPORT.md)).
-- [ ] **P7 Paper Deliverables**: Automated markdown results report, publication figures, and reproducibility checklist.
+- [x] **P7 Paper Deliverables**: Complete publication deliverables package: 6 canonical publication figures in dual vector (`.pdf`, `.svg`) and 300 DPI raster (`.png`), zero-dependency interactive standalone HTML dashboard ([`reports/gallery.html`](reports/gallery.html)), camera-ready research manuscript ([`docs/MANUSCRIPT.md`](docs/MANUSCRIPT.md)), real dataset onboarding CLI & user guide ([`docs/DATA_GUIDE.md`](docs/DATA_GUIDE.md)), master one-click reproduction CLI ([`scripts/reproduce_all.py`](scripts/reproduce_all.py)), and automated Phase 7 Quality Gate ([`scripts/verify_phase7_gate.py`](scripts/verify_phase7_gate.py)).
 
 ---
 
