@@ -230,3 +230,38 @@ __marimo__/
 /results/tables/audit_synthetic/
 /results/tables/*.json
 /results/*.json
+
+# Security, Credentials & Key Protection
+kaggle.json
+*.key
+*.pem
+*.p12
+*.pfx
+*.cert
+*.crt
+id_rsa*
+id_ed25519*
+.env*
+!.env.example
+secrets.*
+credentials.*
+
+# Model Weights, Checkpoints & Large Archives
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.onnx
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+
+# Editors & OS Metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
