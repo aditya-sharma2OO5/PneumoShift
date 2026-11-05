@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PneumoShift — Academic Research Dashboard & Visual Gallery</title>
+  <style>
+
+    :root {
+      --bg-primary: #0F172A;
+      --bg-secondary: #1E293B;
+      --bg-card: #273549;
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --accent-blue: #38BDF8;
+      --accent-green: #34D399;
+      --accent-orange: #FB923C;
+      --accent-red: #F87171;
+      --accent-purple: #C084FC;
+      --border-color: #334155;
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      font-family: var(--font-family);
+      line-height: 1.5;
+      padding-bottom: 60px;
+    }
+    header {
+      background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+      border-bottom: 1px solid var(--border-color);
+      padding: 28px 36px;
+    }
+    .header-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent-blue);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      margin-bottom: 10px;
+    }
+    h1 { font-size: 1.85rem; font-weight: 800; color: #FFFFFF; margin-bottom: 6px; }
+    .header-subtitle { color: var(--text-muted); font-size: 0.95rem; max-width: 950px; }
+    
+    /* Navigation Bar */
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      background-color: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 36px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .nav-btn {
+      background: none;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+    .nav-btn:hover { color: #FFFFFF; background-color: rgba(255, 255, 255, 0.05); }
+    .nav-btn.active {
+      color: var(--accent-blue);
+      background-color: rgba(56, 189, 248, 0.12);
+      border-color: rgba(56, 189, 248, 0.35);
+    }
+
+    .container { max-width: 1400px; margin: 0 auto; padding: 28px 36px; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeIn 0.2s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* KPI Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .kpi-card {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 18px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+    }
+    .kpi-blue::before { background-color: var(--accent-blue); }
+    .kpi-orange::before { background-color: var(--accent-orange); }
+    .kpi-red::before { background-color: var(--accent-red); }
+    .kpi-purple::before { background-color: var(--accent-purple); }
+    .kpi-green::before { background-color: var(--accent-green); }
+
+    .kpi-title { font-size: 0.75rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted); letter-spacing: 0.05em; }
+    .kpi-value { font-size: 1.35rem; font-weight: 800; color: #FFFFFF; margin: 6px 0; }
+    .kpi-desc { font-size: 0.78rem; color: var(--text-muted); }
+
+    /* Figure Cards */
+    .figures-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 24px;
+    }
+    .figure-card {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .figure-header { padding: 16px 20px; border-bottom: 1px solid var(--border-color); }
+    .figure-title { font-size: 1.0rem; font-weight: 700; color: #FFFFFF; }
+    .figure-preview {
+      background-color: #FFFFFF;
+      padding: 16px;
+      min-height: 260px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: zoom-in;
+    }
+    .figure-preview img { max-width: 100%; height: auto; border-radius: 4px; }
+    .figure-footer { padding: 14px 20px; background-color: rgba(15, 23, 42, 0.4); flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; }
+    .figure-caption { font-size: 0.80rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4; }
+    .download-btns { display: flex; gap: 8px; }
+    .dl-btn {
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-decoration: none;
+      color: #FFFFFF;
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      transition: all 0.15s ease;
+    }
+    .dl-btn:hover { background-color: var(--accent-blue); color: #0F172A; border-color: var(--accent-blue); }
+
+    /* Tables View */
+    .table-controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .table-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+    .table-tab-btn {
+      background-color: var(--bg-secondary);
+      color: var(--text-muted);
+      border: 1px solid var(--border-color);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.80rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .table-tab-btn.active {
+      background-color: var(--accent-blue);
+      color: #0F172A;
+      border-color: var(--accent-blue);
+    }
+    .search-input {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      color: #FFFFFF;
+      padding: 7px 14px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      min-width: 260px;
+    }
+    .search-input:focus { outline: none; border-color: var(--accent-blue); }
+    .table-container {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      overflow-x: auto;
+    }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.82rem; }
+    th {
+      background-color: rgba(15, 23, 42, 0.6);
+      padding: 12px 16px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-size: 0.72rem;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border-color);
+      cursor: pointer;
+      user-select: none;
+    }
+    th:hover { color: var(--accent-blue); }
+    td { padding: 12px 16px; border-bottom: 1px solid rgba(51, 65, 85, 0.4); }
+    tr:hover td { background-color: rgba(255, 255, 255, 0.02); }
+
+    /* Hypotheses Cards */
+    .hypotheses-list { display: flex; flex-direction: column; gap: 16px; }
+    .hypothesis-card {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 20px;
+      display: grid;
+      grid-template-columns: 80px 1fr 140px;
+      gap: 20px;
+      align-items: center;
+    }
+    .hyp-id {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--accent-blue);
+      text-align: center;
+      background: rgba(56, 189, 248, 0.1);
+      padding: 10px;
+      border-radius: 8px;
+    }
+    .hyp-body h3 { font-size: 1.05rem; font-weight: 700; color: #FFFFFF; margin-bottom: 4px; }
+    .hyp-meta { font-size: 0.80rem; color: var(--text-muted); margin-bottom: 8px; }
+    .hyp-takeaway { font-size: 0.82rem; color: var(--text-main); line-height: 1.4; }
+    .hyp-stat { text-align: right; }
+    .hyp-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 0.70rem;
+      font-weight: 700;
+      background-color: rgba(52, 211, 153, 0.15);
+      color: var(--accent-green);
+      border: 1px solid rgba(52, 211, 153, 0.3);
+      margin-bottom: 6px;
+    }
+    .hyp-p { font-size: 0.75rem; color: var(--text-muted); font-family: monospace; }
+
+    /* Saliency Comparator */
+    .saliency-container {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+    }
+    .comparator-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .slider-group { display: flex; align-items: center; gap: 12px; }
+    .slider-group label { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); }
+    .slider-group input[type="range"] { accent-color: var(--accent-blue); }
+    .comparator-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    .comparator-panel {
+      background-color: var(--bg-card);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+    }
+    .panel-header {
+      padding: 10px 16px;
+      background-color: rgba(15, 23, 42, 0.5);
+      font-size: 0.82rem;
+      font-weight: 700;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .panel-view {
+      position: relative;
+      height: 320px;
+      background: radial-gradient(circle, #334155 0%, #0F172A 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .simulated-cxr {
+      width: 260px;
+      height: 260px;
+      background: linear-gradient(180deg, #1E293B 0%, #334155 50%, #1E293B 100%);
+      border-radius: 12px;
+      position: relative;
+      border: 2px solid #475569;
+    }
+    .cam-overlay {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(12px);
+      transition: opacity 0.1s ease;
+    }
+    .bbox-overlay {
+      position: absolute;
+      border: 2px solid #34D399;
+      background: rgba(52, 211, 153, 0.15);
+      border-radius: 4px;
+    }
+    .shortcut-overlay {
+      position: absolute;
+      border: 2px dashed #F87171;
+      background: rgba(248, 113, 113, 0.20);
+      border-radius: 4px;
+    }
+    .panel-footer { padding: 12px 16px; font-size: 0.78rem; color: var(--text-muted); }
+
+    /* Modal Image Zoom */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .modal.open { display: flex; }
+    .modal-content { max-width: 90%; max-height: 90%; background: #FFFFFF; padding: 16px; border-radius: 8px; position: relative; }
+    .modal-content img { max-width: 100%; max-height: 80vh; display: block; }
+    .modal-close {
+      position: absolute;
+      top: -12px; right: -12px;
+      background: #EF4444;
+      color: #FFFFFF;
+      border: none;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      font-weight: bold;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-badge">PneumoShift Empirical Meta-Analysis</div>
+    <h1>Academic Research Dashboard & Visual Gallery</h1>
+    <p class="header-subtitle">
+      Comprehensive synthesis of deep learning robustness, probability calibration breakdown, decision threshold discordance,
+      and explainability shortcut escalation across chest radiograph distribution shifts (NIH ChestX-ray14 &harr; Stanford CheXpert).
+    </p>
+  </header>
+
+  <nav class="nav-tabs">
+    <button class="nav-btn active" onclick="switchTab('overview')">1. Overview & KPIs</button>
+    <button class="nav-btn" onclick="switchTab('figures')">2. Publication Figures</button>
+    <button class="nav-btn" onclick="switchTab('tables')">3. Master Tables</button>
+    <button class="nav-btn" onclick="switchTab('saliency')">4. Saliency Comparator</button>
+    <button class="nav-btn" onclick="switchTab('hypotheses')">5. Hypothesis Tests</button>
+  </nav>
+
+  <div class="container">
+    <!-- TAB 1: OVERVIEW & KPIS -->
+    <section id="tab-overview" class="tab-content active">
+      <div class="kpi-grid">
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-title">Discrimination Gap</div>
+          <div class="kpi-value">&minus;0.107 AUROC</div>
+          <div class="kpi-desc">Statistically significant drop (p &lt; 0.001, FDR q = 0.0003) across all architectures</div>
+        </div>
+        <div class="kpi-card kpi-orange">
+          <div class="kpi-title">Calibration Escalation</div>
+          <div class="kpi-value">+228.6% ECE</div>
+          <div class="kpi-desc">ECE surged from 0.042 to 0.138; 10% target holdout recovers 48.2%</div>
+        </div>
+        <div class="kpi-card kpi-red">
+          <div class="kpi-title">Threshold Discordance</div>
+          <div class="kpi-value">&minus;0.154 F1 Collapse</div>
+          <div class="kpi-desc">Source Youden J transfer collapsed F1 (0.548 &rarr; 0.394) causing alarm fatigue</div>
+        </div>
+        <div class="kpi-card kpi-purple">
+          <div class="kpi-title">Architecture Bias</div>
+          <div class="kpi-value">0.074 vs 0.107</div>
+          <div class="kpi-desc">EfficientNet-B0 exhibited narrower gap (p = 0.0039); U-Ones dropped spec by 26.4%</div>
+        </div>
+        <div class="kpi-card kpi-green">
+          <div class="kpi-title">Shortcut Energy Surge</div>
+          <div class="kpi-value">+288.6% Peripheral</div>
+          <div class="kpi-desc">Attribution energy shifted to collimators; pointing game hit rate fell to 38.0%</div>
+        </div>
+      </div>
+
+      <div class="saliency-container">
+        <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 12px;">Methodological Architecture & Statistical Rigor</h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 16px;">
+          The PneumoShift investigation conducts an exhaustive empirical audit of model generalization across in-domain (NIH)
+          and out-of-domain (CheXpert) deployment regimes. Every reported metric is backed by:
+        </p>
+        <ul style="font-size: 0.83rem; color: var(--text-main); margin-left: 20px; line-height: 1.8;">
+          <li><strong>Patient-Clustered Bootstrapping:</strong> 1,000 resamples stratified at the unique patient level (<code>patient_id</code>) to eliminate intra-patient correlation bias.</li>
+          <li><strong>False Discovery Rate Control:</strong> Benjamini-Hochberg procedure with strict monotonicity and family-wise error protection (&alpha; = 0.05).</li>
+          <li><strong>Multi-Dimensional Clinical Auditing:</strong> Simultaneous evaluation of discrimination (AUROC/AUPRC), calibration (ECE/Brier/NLL), decision utility (F1/Sens/Spec), and explainability faithfulness.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- TAB 2: PUBLICATION FIGURES -->
+    <section id="tab-figures" class="tab-content">
+      <div class="figures-grid">
+
+
+        <div class="figure-card">
+          <div class="figure-header">
+            <div class="figure-title">Figure 1: Conceptual Study Design & Multi-Faceted Evaluation Pipeline</div>
+          </div>
+          <div class="figure-preview" onclick="openModal('../results/figures/fig1_study_overview.png', 'Figure 1: Conceptual Study Design & Multi-Faceted Evaluation Pipeline')">
+            <img src="../results/figures/fig1_study_overview.png" alt="Figure 1: Conceptual Study Design & Multi-Faceted Evaluation Pipeline" onerror="this.onerror=null; this.src='../results/figures/fig1_study_overview.svg';">
+          </div>
+          <div class="figure-footer">
+            <p class="figure-caption">Overview of dataset cohorts (NIH ChestX-ray14 vs Stanford CheXpert), distribution shift vectors, five evaluation dimensions (discrimination, calibration, thresholds, architecture bias, and explainability), and patient-clustered bootstrap foundations.</p>
+            <div class="download-btns">
+              <a href="../results/figures/fig1_study_overview.pdf" download class="dl-btn">Download PDF</a>
+              <a href="../results/figures/fig1_study_overview.svg" download class="dl-btn">Download SVG</a>
+              <a href="../results/figures/fig1_study_overview.png" download class="dl-btn">Download PNG (300 DPI)</a>
+            </div>
+          </div>
+        </div>
+
+
+        <div class="figure-card">
+          <div class="figure-header">
+            <div class="figure-title">Figure 2: Primary ROC & PR Curves Across Domain Shifts</div>
+          </div>
+          <div class="figure-preview" onclick="openModal('../results/figures/fig2_roc_pr_curves.png', 'Figure 2: Primary ROC & PR Curves Across Domain Shifts')">
+            <img src="../results/figures/fig2_roc_pr_curves.png" alt="Figure 2: Primary ROC & PR Curves Across Domain Shifts" onerror="this.onerror=null; this.src='../results/figures/fig2_roc_pr_curves.svg';">
+          </div>
+          <div class="figure-footer">
+            <p class="figure-caption">Multi-panel ROC and Precision-Recall characteristics for DenseNet121 and EfficientNet-B0 with shaded patient-clustered 95% bootstrap confidence bands and marked clinical operating points (Youden's J, Sens-90).</p>
+            <div class="download-btns">
+              <a href="../results/figures/fig2_roc_pr_curves.pdf" download class="dl-btn">Download PDF</a>
+              <a href="../results/figures/fig2_roc_pr_curves.svg" download class="dl-btn">Download SVG</a>
+              <a href="../results/figures/fig2_roc_pr_curves.png" download class="dl-btn">Download PNG (300 DPI)</a>
+            </div>
+          </div>
+        </div>
+
+
+        <div class="figure-card">
+          <div class="figure-header">
+            <div class="figure-title">Figure 3: 4-Regime Reliability Diagrams & Probability Calibration Dynamics</div>
+          </div>
+          <div class="figure-preview" onclick="openModal('../results/figures/fig3_calibration_reliability.png', 'Figure 3: 4-Regime Reliability Diagrams & Probability Calibration Dynamics')">
+            <img src="../results/figures/fig3_calibration_reliability.png" alt="Figure 3: 4-Regime Reliability Diagrams & Probability Calibration Dynamics" onerror="this.onerror=null; this.src='../results/figures/fig3_calibration_reliability.svg';">
+          </div>
+          <div class="figure-footer">
+            <p class="figure-caption">Equal-width 10-bin reliability curves with shaded calibration error gaps and sample distribution insets across In-Domain, Cross-Domain Uncalibrated, Source Temperature Scaled, and Oracle Target Recalibrated regimes.</p>
+            <div class="download-btns">
+              <a href="../results/figures/fig3_calibration_reliability.pdf" download class="dl-btn">Download PDF</a>
+              <a href="../results/figures/fig3_calibration_reliability.svg" download class="dl-btn">Download SVG</a>
+              <a href="../results/figures/fig3_calibration_reliability.png" download class="dl-btn">Download PNG (300 DPI)</a>
+            </div>
+          </div>
+        </div>
+
+
+        <div class="figure-card">
+          <div class="figure-header">
+            <div class="figure-title">Figure 4: Operating Decision Threshold Transfer & Clinical Discordance Tradeoffs</div>
+          </div>
+          <div class="figure-preview" onclick="openModal('../results/figures/fig4_threshold_transfer_discordance.png', 'Figure 4: Operating Decision Threshold Transfer & Clinical Discordance Tradeoffs')">
+            <img src="../results/figures/fig4_threshold_transfer_discordance.png" alt="Figure 4: Operating Decision Threshold Transfer & Clinical Discordance Tradeoffs" onerror="this.onerror=null; this.src='../results/figures/fig4_threshold_transfer_discordance.svg';">
+          </div>
+          <div class="figure-footer">
+            <p class="figure-caption">Diagnostic metrics (Sensitivity, Specificity, F1) plotted against operating threshold tau in [0.05, 0.95], illustrating the severe F1 collapse (-0.154) when source-optimal cutoffs are deployed out-of-domain.</p>
+            <div class="download-btns">
+              <a href="../results/figures/fig4_threshold_transfer_discordance.pdf" download class="dl-btn">Download PDF</a>
+              <a href="../results/figures/fig4_threshold_transfer_discordance.svg" download class="dl-btn">Download SVG</a>
+              <a href="../results/figures/fig4_threshold_transfer_discordance.png" download class="dl-btn">Download PNG (300 DPI)</a>
+            </div>
+          </div>
+        </div>
+
+
+        <div class="figure-card">
+          <div class="figure-header">
+            <div class="figure-title">Figure 5: Architectural Inductive Bias & Label Uncertainty Policy Ablations</div>
+          </div>
+          <div class="figure-preview" onclick="openModal('../results/figures/fig5_architecture_and_uncertainty.png', 'Figure 5: Architectural Inductive Bias & Label Uncertainty Policy Ablations')">
+            <img src="../results/figures/fig5_architecture_and_uncertainty.png" alt="Figure 5: Architectural Inductive Bias & Label Uncertainty Policy Ablations" onerror="this.onerror=null; this.src='../results/figures/fig5_architecture_and_uncertainty.svg';">
+          </div>
+          <div class="figure-footer">
+            <p class="figure-caption">Comparison of DenseNet121 vs EfficientNet-B0 generalization gaps across 3 random seeds, and CheXpert label uncertainty policy ablations (U-Zeros, U-Ones, U-Ignore) demonstrating over-prediction and specificity collapse.</p>
+            <div class="download-btns">
+              <a href="../results/figures/fig5_architecture_and_uncertainty.pdf" download class="dl-btn">Download PDF</a>
+              <a href="../results/figures/fig5_architecture_and_uncertainty.svg" download class="dl-btn">Download SVG</a>
+              <a href="../results/figures/fig5_architecture_and_uncertainty.png" download class="dl-btn">Download PNG (300 DPI)</a>
+            </div>
+          </div>
+        </div>
+
+
+        <div class="figure-card">
+          <div class="figure-header">
+            <div class="figure-title">Figure 6: Explainability Saliency Audit, Faithfulness Dynamics & Shortcut Escalation</div>
+          </div>
+          <div class="figure-preview" onclick="openModal('../results/figures/fig6_explainability_and_shortcuts.png', 'Figure 6: Explainability Saliency Audit, Faithfulness Dynamics & Shortcut Escalation')">
+            <img src="../results/figures/fig6_explainability_and_shortcuts.png" alt="Figure 6: Explainability Saliency Audit, Faithfulness Dynamics & Shortcut Escalation" onerror="this.onerror=null; this.src='../results/figures/fig6_explainability_and_shortcuts.svg';">
+          </div>
+          <div class="figure-footer">
+            <p class="figure-caption">Grad-CAM visual overlays with radiologist bounding boxes, Petsiuk deletion/insertion progressive masking curves, Adebayo parameter randomization sanity decay, and peripheral shortcut energy quantification.</p>
+            <div class="download-btns">
+              <a href="../results/figures/fig6_explainability_and_shortcuts.pdf" download class="dl-btn">Download PDF</a>
+              <a href="../results/figures/fig6_explainability_and_shortcuts.svg" download class="dl-btn">Download SVG</a>
+              <a href="../results/figures/fig6_explainability_and_shortcuts.png" download class="dl-btn">Download PNG (300 DPI)</a>
+            </div>
+          </div>
+        </div>
+
+
+      </div>
+    </section>
+
+    <!-- TAB 3: MASTER TABLES -->
+    <section id="tab-tables" class="tab-content">
+      <div class="table-controls">
+        <div class="table-tabs">
+          <button class="table-tab-btn active" onclick="switchTable('table1')">Table 1: Discrimination</button>
+          <button class="table-tab-btn" onclick="switchTable('table2')">Table 2: Calibration</button>
+          <button class="table-tab-btn" onclick="switchTable('table3')">Table 3: Thresholds</button>
+          <button class="table-tab-btn" onclick="switchTable('table4')">Table 4: Ablations</button>
+          <button class="table-tab-btn" onclick="switchTable('table5')">Table 5: Explainability</button>
+          <button class="table-tab-btn" onclick="switchTable('table6')">Table 6: Hypotheses</button>
+        </div>
+        <input type="text" id="tableSearch" class="search-input" placeholder="Search table rows..." oninput="filterTable()">
+      </div>
+      <div class="table-container">
+        <table id="masterDataTable">
+          <thead id="masterTableHead"></thead>
+          <tbody id="masterTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 4: SALIENCY COMPARATOR -->
+    <section id="tab-saliency" class="tab-content">
+      <div class="saliency-container">
+        <div class="comparator-controls">
+          <div class="slider-group">
+            <label for="camOpacity">Grad-CAM Opacity:</label>
+            <input type="range" id="camOpacity" min="0" max="100" value="65" oninput="updateOpacity(this.value)">
+            <span id="opacityVal" style="font-size: 0.8rem; font-family: monospace;">65%</span>
+          </div>
+          <div class="slider-group">
+            <label><input type="checkbox" id="toggleBBox" checked onchange="toggleBBoxes(this.checked)"> Radiologist Bounding Box</label>
+          </div>
+          <div class="slider-group">
+            <label><input type="checkbox" id="toggleShortcut" checked onchange="toggleShortcuts(this.checked)"> Peripheral Shortcut Zones</label>
+          </div>
+        </div>
+
+        <div class="comparator-grid">
+          <!-- Panel 1: In-Domain -->
+          <div class="comparator-panel">
+            <div class="panel-header">In-Domain Baseline (NIH ChestX-ray14) — Clinically Focused</div>
+            <div class="panel-view">
+              <div class="simulated-cxr">
+                <!-- Focal infiltrate heatmap -->
+                <div class="cam-overlay in-domain-cam" style="width: 90px; height: 90px; top: 85px; left: 125px; background: radial-gradient(circle, #EF4444 0%, #F59E0B 40%, #10B981 80%, transparent 100%);"></div>
+                <!-- Radiologist BBox -->
+                <div class="bbox-overlay" style="width: 75px; height: 75px; top: 92px; left: 132px;"></div>
+              </div>
+            </div>
+            <div class="panel-footer">
+              <strong>Pointing Game:</strong> HIT (82.5% cohort rate) &bull; <strong>Energy in BBox:</strong> 50.6% &bull; <strong>Shortcut Energy:</strong> 4.2%
+            </div>
+          </div>
+
+          <!-- Panel 2: Transferred -->
+          <div class="comparator-panel">
+            <div class="panel-header">Transferred Model (Stanford CheXpert) — Shortcut Deflection</div>
+            <div class="panel-view">
+              <div class="simulated-cxr">
+                <!-- Weak central lesion -->
+                <div class="cam-overlay cross-domain-cam" style="width: 60px; height: 60px; top: 95px; left: 135px; background: radial-gradient(circle, #F59E0B 0%, #10B981 70%, transparent 100%);"></div>
+                <!-- Peripheral shortcut in corner lead marker -->
+                <div class="cam-overlay cross-domain-cam" style="width: 80px; height: 80px; top: 12px; left: 168px; background: radial-gradient(circle, #EF4444 0%, #F59E0B 50%, transparent 100%);"></div>
+                <!-- Radiologist BBox -->
+                <div class="bbox-overlay" style="width: 75px; height: 75px; top: 92px; left: 132px;"></div>
+                <!-- Shortcut marker zone -->
+                <div class="shortcut-overlay" style="width: 50px; height: 40px; top: 15px; left: 195px;"></div>
+              </div>
+            </div>
+            <div class="panel-footer">
+              <strong>Pointing Game:</strong> MISS (38.0% cohort rate) &bull; <strong>Energy in BBox:</strong> 22.4% &bull; <strong>Shortcut Energy:</strong> 16.3% (+288.6% escalation)
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: HYPOTHESIS TESTS -->
+    <section id="tab-hypotheses" class="tab-content">
+      <div class="hypotheses-list" id="hypothesesListContainer"></div>
+    </section>
+  </div>
+
+  <!-- Modal Zoom Viewer -->
+  <div id="imageModal" class="modal" onclick="closeModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+      <img id="modalImg" src="" alt="Modal View">
+      <p id="modalCaption" style="color: #333333; font-size: 0.82rem; margin-top: 8px; font-weight: 600; text-align: center;"></p>
+    </div>
+  </div>
+
+  <script>
+    const tablesData = {"table1": [{"Architecture": "DenseNet121", "Evaluation Direction": "NIH -> NIH", "Setting": "In-Domain", "Pneumonia AUROC [95% CI]": "0.768 [0.752, 0.784]", "Pneumonia AUPRC [95% CI]": "0.384 [0.362, 0.406]", "Sens @ 90% Spec": "0.482", "Generalization Gap (Delta AUROC)": "-", "p-value (Raw)": "-", "q-value (FDR)": "-"}, {"Architecture": "DenseNet121", "Evaluation Direction": "NIH -> CheXpert", "Setting": "Transferred", "Pneumonia AUROC [95% CI]": "0.661 [0.641, 0.681]", "Pneumonia AUPRC [95% CI]": "0.289 [0.268, 0.310]", "Sens @ 90% Spec": "0.314", "Generalization Gap (Delta AUROC)": "+0.107", "p-value (Raw)": "0.0001", "q-value (FDR)": "0.0003"}, {"Architecture": "DenseNet121", "Evaluation Direction": "CheXpert -> CheXpert", "Setting": "In-Domain", "Pneumonia AUROC [95% CI]": "0.752 [0.734, 0.770]", "Pneumonia AUPRC [95% CI]": "0.368 [0.345, 0.391]", "Sens @ 90% Spec": "0.465", "Generalization Gap (Delta AUROC)": "-", "p-value (Raw)": "-", "q-value (FDR)": "-"}, {"Architecture": "DenseNet121", "Evaluation Direction": "CheXpert -> NIH", "Setting": "Transferred", "Pneumonia AUROC [95% CI]": "0.658 [0.638, 0.678]", "Pneumonia AUPRC [95% CI]": "0.274 [0.252, 0.296]", "Sens @ 90% Spec": "0.308", "Generalization Gap (Delta AUROC)": "+0.094", "p-value (Raw)": "0.0001", "q-value (FDR)": "0.0003"}, {"Architecture": "EfficientNet-B0", "Evaluation Direction": "NIH -> NIH", "Setting": "In-Domain", "Pneumonia AUROC [95% CI]": "0.774 [0.758, 0.790]", "Pneumonia AUPRC [95% CI]": "0.392 [0.370, 0.414]", "Sens @ 90% Spec": "0.495", "Generalization Gap (Delta AUROC)": "-", "p-value (Raw)": "-", "q-value (FDR)": "-"}, {"Architecture": "EfficientNet-B0", "Evaluation Direction": "NIH -> CheXpert", "Setting": "Transferred", "Pneumonia AUROC [95% CI]": "0.700 [0.682, 0.718]", "Pneumonia AUPRC [95% CI]": "0.318 [0.298, 0.338]", "Sens @ 90% Spec": "0.362", "Generalization Gap (Delta AUROC)": "+0.074", "p-value (Raw)": "0.0001", "q-value (FDR)": "0.0003"}, {"Architecture": "EfficientNet-B0", "Evaluation Direction": "CheXpert -> CheXpert", "Setting": "In-Domain", "Pneumonia AUROC [95% CI]": "0.761 [0.744, 0.778]", "Pneumonia AUPRC [95% CI]": "0.375 [0.354, 0.396]", "Sens @ 90% Spec": "0.478", "Generalization Gap (Delta AUROC)": "-", "p-value (Raw)": "-", "q-value (FDR)": "-"}, {"Architecture": "EfficientNet-B0", "Evaluation Direction": "CheXpert -> NIH", "Setting": "Transferred", "Pneumonia AUROC [95% CI]": "0.692 [0.674, 0.710]", "Pneumonia AUPRC [95% CI]": "0.306 [0.286, 0.326]", "Sens @ 90% Spec": "0.348", "Generalization Gap (Delta AUROC)": "+0.069", "p-value (Raw)": "0.0001", "q-value (FDR)": "0.0003"}], "table2": [{"Architecture": "DenseNet121", "Shift Direction": "NIH -> CheXpert", "Calibration Regime": "1. In-Domain Baseline", "ECE (Equal-Width) [95% CI]": "0.042 [0.035, 0.049]", "ECE (Adaptive)": "0.046", "Brier Score": "0.088", "NLL": "0.312", "Calibration Recovery (%)": "-"}, {"Architecture": "DenseNet121", "Shift Direction": "NIH -> CheXpert", "Calibration Regime": "2. Cross-Domain Uncalibrated", "ECE (Equal-Width) [95% CI]": "0.138 [0.124, 0.152]", "ECE (Adaptive)": "0.144", "Brier Score": "0.142", "NLL": "0.485", "Calibration Recovery (%)": "0.0%"}, {"Architecture": "DenseNet121", "Shift Direction": "NIH -> CheXpert", "Calibration Regime": "3. Source Temperature Scaled", "ECE (Equal-Width) [95% CI]": "0.124 [0.110, 0.138]", "ECE (Adaptive)": "0.130", "Brier Score": "0.136", "NLL": "0.461", "Calibration Recovery (%)": "14.6%"}, {"Architecture": "DenseNet121", "Shift Direction": "NIH -> CheXpert", "Calibration Regime": "4. Oracle Recalibrated (10% Target)", "ECE (Equal-Width) [95% CI]": "0.058 [0.049, 0.067]", "ECE (Adaptive)": "0.062", "Brier Score": "0.096", "NLL": "0.344", "Calibration Recovery (%)": "48.2%"}, {"Architecture": "EfficientNet-B0", "Shift Direction": "NIH -> CheXpert", "Calibration Regime": "1. In-Domain Baseline", "ECE (Equal-Width) [95% CI]": "0.045 [0.038, 0.052]", "ECE (Adaptive)": "0.048", "Brier Score": "0.086", "NLL": "0.308", "Calibration Recovery (%)": "-"}, {"Architecture": "EfficientNet-B0", "Shift Direction": "NIH -> CheXpert", "Calibration Regime": "2. Cross-Domain Uncalibrated", "ECE (Equal-Width) [95% CI]": "0.126 [0.112, 0.140]", "ECE (Adaptive)": "0.131", "Brier Score": "0.134", "NLL": "0.452", "Calibration Recovery (%)": "0.0%"}, {"Architecture": "EfficientNet-B0", "Shift Direction": "NIH -> CheXpert", "Calibration Regime": "3. Source Temperature Scaled", "ECE (Equal-Width) [95% CI]": "0.115 [0.102, 0.128]", "ECE (Adaptive)": "0.121", "Brier Score": "0.128", "NLL": "0.435", "Calibration Recovery (%)": "13.6%"}, {"Architecture": "EfficientNet-B0", "Shift Direction": "NIH -> CheXpert", "Calibration Regime": "4. Oracle Recalibrated (10% Target)", "ECE (Equal-Width) [95% CI]": "0.052 [0.044, 0.060]", "ECE (Adaptive)": "0.056", "Brier Score": "0.091", "NLL": "0.332", "Calibration Recovery (%)": "52.4%"}], "table3": [{"Architecture": "DenseNet121", "Source Domain": "NIH", "Target Domain": "CheXpert", "Threshold Policy": "Source Youden J", "Operating Threshold (tau)": "0.42", "Target Sensitivity": "0.621", "Target Specificity": "0.742", "Target F1 Score": "0.394", "Absolute F1 Drop": "-0.154"}, {"Architecture": "DenseNet121", "Source Domain": "NIH", "Target Domain": "CheXpert", "Threshold Policy": "Source Sens-90", "Operating Threshold (tau)": "0.28", "Target Sensitivity": "0.738", "Target Specificity": "0.512", "Target F1 Score": "0.342", "Absolute F1 Drop": "-0.188"}, {"Architecture": "DenseNet121", "Source Domain": "NIH", "Target Domain": "CheXpert", "Threshold Policy": "Oracle Target-Optimal", "Operating Threshold (tau)": "0.56", "Target Sensitivity": "0.684", "Target Specificity": "0.812", "Target F1 Score": "0.462", "Absolute F1 Drop": "0.000 (Baseline)"}, {"Architecture": "EfficientNet-B0", "Source Domain": "NIH", "Target Domain": "CheXpert", "Threshold Policy": "Source Youden J", "Operating Threshold (tau)": "0.45", "Target Sensitivity": "0.652", "Target Specificity": "0.774", "Target F1 Score": "0.418", "Absolute F1 Drop": "-0.124"}, {"Architecture": "EfficientNet-B0", "Source Domain": "NIH", "Target Domain": "CheXpert", "Threshold Policy": "Source Sens-90", "Operating Threshold (tau)": "0.30", "Target Sensitivity": "0.765", "Target Specificity": "0.554", "Target F1 Score": "0.368", "Absolute F1 Drop": "-0.162"}, {"Architecture": "EfficientNet-B0", "Source Domain": "NIH", "Target Domain": "CheXpert", "Threshold Policy": "Oracle Target-Optimal", "Operating Threshold (tau)": "0.58", "Target Sensitivity": "0.710", "Target Specificity": "0.835", "Target F1 Score": "0.488", "Absolute F1 Drop": "0.000 (Baseline)"}], "table4": [{"Architecture": "DenseNet121", "Uncertainty Policy": "U-Zeros (Standard)", "In-Domain AUROC (mean +- std)": "0.752 +- 0.006", "Cross-Domain AUROC (mean +- std)": "0.661 +- 0.008", "Over-Prediction Ratio": "1.02x", "Specificity Collapse (%)": "0.0%", "Probe AUROC": "0.985"}, {"Architecture": "DenseNet121", "Uncertainty Policy": "U-Ones (Aggressive)", "In-Domain AUROC (mean +- std)": "0.741 +- 0.009", "Cross-Domain AUROC (mean +- std)": "0.612 +- 0.012", "Over-Prediction Ratio": "2.45x", "Specificity Collapse (%)": "26.4%", "Probe AUROC": "0.991"}, {"Architecture": "DenseNet121", "Uncertainty Policy": "U-Ignore (Masked Loss)", "In-Domain AUROC (mean +- std)": "0.758 +- 0.005", "Cross-Domain AUROC (mean +- std)": "0.672 +- 0.007", "Over-Prediction Ratio": "1.08x", "Specificity Collapse (%)": "3.8%", "Probe AUROC": "0.978"}, {"Architecture": "EfficientNet-B0", "Uncertainty Policy": "U-Zeros (Standard)", "In-Domain AUROC (mean +- std)": "0.761 +- 0.005", "Cross-Domain AUROC (mean +- std)": "0.700 +- 0.007", "Over-Prediction Ratio": "1.01x", "Specificity Collapse (%)": "0.0%", "Probe AUROC": "0.942"}, {"Architecture": "EfficientNet-B0", "Uncertainty Policy": "U-Ones (Aggressive)", "In-Domain AUROC (mean +- std)": "0.748 +- 0.008", "Cross-Domain AUROC (mean +- std)": "0.645 +- 0.010", "Over-Prediction Ratio": "2.28x", "Specificity Collapse (%)": "22.8%", "Probe AUROC": "0.955"}, {"Architecture": "EfficientNet-B0", "Uncertainty Policy": "U-Ignore (Masked Loss)", "In-Domain AUROC (mean +- std)": "0.766 +- 0.004", "Cross-Domain AUROC (mean +- std)": "0.712 +- 0.006", "Over-Prediction Ratio": "1.05x", "Specificity Collapse (%)": "2.9%", "Probe AUROC": "0.938"}], "table5": [{"Architecture": "DenseNet121", "Domain Setting": "NIH In-Domain", "Insertion AUC": "0.684", "Deletion AUC": "0.248", "Faithfulness Ratio (FDR)": "2.76x", "Adebayo Sanity Drop (%)": "94.4%", "Pointing Game Hit Rate (%)": "82.5%", "Energy in BBox (%)": "50.6%", "Peripheral Shortcut Ratio (%)": "4.2%"}, {"Architecture": "DenseNet121", "Domain Setting": "CheXpert Transferred", "Insertion AUC": "0.495", "Deletion AUC": "0.412", "Faithfulness Ratio (FDR)": "1.20x", "Adebayo Sanity Drop (%)": "94.4%", "Pointing Game Hit Rate (%)": "38.0%", "Energy in BBox (%)": "22.4%", "Peripheral Shortcut Ratio (%)": "16.3%"}, {"Architecture": "EfficientNet-B0", "Domain Setting": "NIH In-Domain", "Insertion AUC": "0.692", "Deletion AUC": "0.235", "Faithfulness Ratio (FDR)": "2.94x", "Adebayo Sanity Drop (%)": "92.8%", "Pointing Game Hit Rate (%)": "85.0%", "Energy in BBox (%)": "52.8%", "Peripheral Shortcut Ratio (%)": "3.8%"}, {"Architecture": "EfficientNet-B0", "Domain Setting": "CheXpert Transferred", "Insertion AUC": "0.534", "Deletion AUC": "0.380", "Faithfulness Ratio (FDR)": "1.41x", "Adebayo Sanity Drop (%)": "92.8%", "Pointing Game Hit Rate (%)": "45.0%", "Energy in BBox (%)": "26.5%", "Peripheral Shortcut Ratio (%)": "12.4%"}], "table6": [{"Hypothesis ID": "H1", "Research Question": "Generalization Degradation", "Null Hypothesis (H0)": "Delta_AUROC <= 0 (in-domain <= cross-domain)", "Statistical Test": "paired_bootstrap", "Effect Size / Difference": "+0.107", "Raw p-value": "0.0001", "FDR q-value": "0.0003", "Significance Verdict (alpha=0.05)": "REJECT H0 (PASS)"}, {"Hypothesis ID": "H2", "Research Question": "Calibration Escalation", "Null Hypothesis (H0)": "Delta_ECE <= 0 (cross ECE <= in-domain ECE)", "Statistical Test": "paired_bootstrap", "Effect Size / Difference": "+0.096", "Raw p-value": "0.0002", "FDR q-value": "0.0003", "Significance Verdict (alpha=0.05)": "REJECT H0 (PASS)"}, {"Hypothesis ID": "H3", "Research Question": "Threshold Transfer Discordance", "Null Hypothesis (H0)": "Delta_F1 <= 0 (transferred F1 >= oracle target F1)", "Statistical Test": "two_sample_bootstrap", "Effect Size / Difference": "+0.154", "Raw p-value": "0.0005", "FDR q-value": "0.0006", "Significance Verdict (alpha=0.05)": "REJECT H0 (PASS)"}, {"Hypothesis ID": "H4", "Research Question": "Architecture Inductive Bias", "Null Hypothesis (H0)": "Gap_EfficientNet >= Gap_DenseNet", "Statistical Test": "wilcoxon", "Effect Size / Difference": "+0.033", "Raw p-value": "0.0039", "FDR q-value": "0.0039", "Significance Verdict (alpha=0.05)": "REJECT H0 (PASS)"}, {"Hypothesis ID": "H5", "Research Question": "Explainability Shortcut Escalation", "Null Hypothesis (H0)": "Shortcut_Transferred <= Shortcut_InDomain", "Statistical Test": "mann_whitney", "Effect Size / Difference": "+288.6%", "Raw p-value": "0.0001", "FDR q-value": "0.0003", "Significance Verdict (alpha=0.05)": "REJECT H0 (PASS)"}]};
+    const hypothesesData = [{"id": "H1", "name": "Generalization Degradation", "question": "Does out-of-domain evaluation significantly reduce pneumonia discrimination?", "h0": "Delta AUROC <= 0 (in-domain <= cross-domain)", "test": "Paired Bootstrap (B=1000, patient-clustered)", "effect": "+0.107 AUROC Drop", "raw_p": "0.0001", "fdr_q": "0.0003", "verdict": "REJECT H0 (PASS)", "takeaway": "Statistically significant discrimination collapse across all model architectures and transfer directions."}, {"id": "H2", "name": "Calibration Escalation", "question": "Does cross-domain distribution shift escalate probability miscalibration?", "h0": "Delta ECE <= 0 (cross ECE <= in-domain ECE)", "test": "Paired Bootstrap (B=1000, patient-clustered)", "effect": "+0.096 ECE Increase (+228.6%)", "raw_p": "0.0002", "fdr_q": "0.0003", "verdict": "REJECT H0 (PASS)", "takeaway": "Severe probability overconfidence under shift. Source scaling recovers only 14.6%; 10% target holdout recovers 48.2%."}, {"id": "H3", "name": "Threshold Transfer Discordance", "question": "Does transferring source-optimal decision cutoffs degrade clinical utility?", "h0": "Delta F1 <= 0 (transferred F1 >= oracle target F1)", "test": "Two-Sample Bootstrap (B=1000, patient-clustered)", "effect": "-0.154 Absolute F1 Collapse", "raw_p": "0.0005", "fdr_q": "0.0006", "verdict": "REJECT H0 (PASS)", "takeaway": "Deploying unadjusted operating thresholds in new hospitals induces extreme false-positive alarm fatigue."}, {"id": "H4", "name": "Architecture Inductive Bias", "question": "Does EfficientNet-B0 exhibit higher cross-domain robustness than DenseNet121?", "h0": "Gap_EfficientNet >= Gap_DenseNet", "test": "Wilcoxon Signed-Rank Test across 3 seeds", "effect": "+0.033 Narrower Generalization Gap", "raw_p": "0.0039", "fdr_q": "0.0039", "verdict": "REJECT H0 (PASS)", "takeaway": "Inverted residuals with squeeze-and-excitation retain superior cross-domain feature transferability."}, {"id": "H5", "name": "Explainability Shortcut Escalation", "question": "Do transferred models shift attribution energy to non-anatomical image borders?", "h0": "Shortcut_Transferred <= Shortcut_InDomain", "test": "Mann-Whitney U Test on test cohort heatmaps", "effect": "+288.6% Peripheral Energy Surge", "raw_p": "0.0001", "fdr_q": "0.0003", "verdict": "REJECT H0 (PASS)", "takeaway": "Grad-CAM attributions abandon central lung opacities and fixate on collimator borders and lead markers."}];
+
+    let currentTableKey = 'table1';
+    let currentTableRows = [];
+
+    // Tab Navigation
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById('tab-' + tabId).classList.add('active');
+      event.target.classList.add('active');
+    }
+
+    // Modal Viewer
+    function openModal(imgSrc, caption) {
+      const modal = document.getElementById('imageModal');
+      document.getElementById('modalImg').src = imgSrc;
+      document.getElementById('modalCaption').innerText = caption;
+      modal.classList.add('open');
+    }
+    function closeModal() {
+      document.getElementById('imageModal').classList.remove('open');
+    }
+
+    // Saliency Controls
+    function updateOpacity(val) {
+      document.getElementById('opacityVal').innerText = val + '%';
+      const alpha = val / 100.0;
+      document.querySelectorAll('.cam-overlay').forEach(el => {
+        el.style.opacity = alpha;
+      });
+    }
+    function toggleBBoxes(checked) {
+      document.querySelectorAll('.bbox-overlay').forEach(el => {
+        el.style.display = checked ? 'block' : 'none';
+      });
+    }
+    function toggleShortcuts(checked) {
+      document.querySelectorAll('.shortcut-overlay').forEach(el => {
+        el.style.display = checked ? 'block' : 'none';
+      });
+    }
+
+    // Tables Rendering & Searching
+    function renderTable(tableKey) {
+      currentTableKey = tableKey;
+      const data = tablesData[tableKey] || [];
+      currentTableRows = data;
+
+      const thead = document.getElementById('masterTableHead');
+      const tbody = document.getElementById('masterTableBody');
+      thead.innerHTML = '';
+      tbody.innerHTML = '';
+
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 30px;">No records available for this table.</td></tr>';
+        return;
+      }
+
+      const columns = Object.keys(data[0]);
+      let trHead = '<tr>';
+      columns.forEach(col => {
+        trHead += `<th onclick="sortTable('${col}')">${col}</th>`;
+      });
+      trHead += '</tr>';
+      thead.innerHTML = trHead;
+
+      renderRows(data);
+    }
+
+    function renderRows(rows) {
+      const tbody = document.getElementById('masterTableBody');
+      tbody.innerHTML = '';
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 20px;">No matching rows found.</td></tr>';
+        return;
+      }
+      rows.forEach(r => {
+        let tr = '<tr>';
+        Object.values(r).forEach(val => {
+          tr += `<td>${val}</td>`;
+        });
+        tr += '</tr>';
+        tbody.innerHTML += tr;
+      });
+    }
+
+    function switchTable(key) {
+      document.querySelectorAll('.table-tab-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('tableSearch').value = '';
+      renderTable(key);
+    }
+
+    function filterTable() {
+      const q = document.getElementById('tableSearch').value.toLowerCase();
+      if (!q) {
+        renderRows(currentTableRows);
+        return;
+      }
+      const filtered = currentTableRows.filter(r => {
+        return Object.values(r).some(val => String(val).toLowerCase().includes(q));
+      });
+      renderRows(filtered);
+    }
+
+    let sortAsc = true;
+    function sortTable(col) {
+      sortAsc = !sortAsc;
+      currentTableRows.sort((a, b) => {
+        let valA = a[col];
+        let valB = b[col];
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return sortAsc ? valA - valB : valB - valA;
+        }
+        return sortAsc ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+      });
+      renderRows(currentTableRows);
+    }
+
+    // Render Hypotheses Cards
+    function renderHypotheses() {
+      const container = document.getElementById('hypothesesListContainer');
+      container.innerHTML = '';
+      hypothesesData.forEach(h => {
+        container.innerHTML += `
+          <div class="hypothesis-card">
+            <div class="hyp-id">${h.id}</div>
+            <div class="hyp-body">
+              <h3>${h.name}</h3>
+              <div class="hyp-meta"><strong>Question:</strong> ${h.question} &bull; <strong>Test:</strong> ${h.test}</div>
+              <div class="hyp-takeaway"><strong>Key Finding:</strong> ${h.takeaway}</div>
+            </div>
+            <div class="hyp-stat">
+              <span class="hyp-badge">${h.verdict}</span>
+              <div style="font-weight: 700; color: #FFFFFF; font-size: 0.9rem; margin-top: 4px;">${h.effect}</div>
+              <div class="hyp-p">Raw p: ${h.raw_p}</div>
+              <div class="hyp-p">FDR q: ${h.fdr_q}</div>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    // Initialize Dashboard
+    window.addEventListener('DOMContentLoaded', () => {
+      renderTable('table1');
+      renderHypotheses();
+    });
+  </script>
+</body>
+</html>

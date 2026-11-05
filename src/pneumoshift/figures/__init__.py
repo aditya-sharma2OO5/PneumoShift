@@ -16,6 +16,10 @@ from pneumoshift.figures.config_schemas import (
     validate_global_figure_config,
     validate_plot_style,
 )
+from pneumoshift.figures.gallery import (
+    build_gallery_html,
+    generate_gallery,
+)
 from pneumoshift.figures.plotters import (
     apply_publication_theme,
     export_figure,
@@ -52,5 +56,7 @@ __all__ = [
     "plot_fig4_threshold_transfer_discordance",
     "plot_fig5_architecture_and_uncertainty",
     "plot_fig6_explainability_and_shortcuts",
+    "build_gallery_html",
+    "generate_gallery",
 ]
 
