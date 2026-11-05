@@ -227,4 +227,6 @@ __marimo__/
 /results/tables/phase4_ablations/
 /results/tables/xai/
 /results/tables/master/
+/results/tables/audit_synthetic/
 /results/tables/*.json
+/results/*.json

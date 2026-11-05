@@ -129,7 +129,7 @@ def build_gallery_html(
 
     for tid, fname, title in table_stems:
         file_p = tb_path / fname
-        if file_p.is_file() and not smoke_test:
+        if file_p.is_file():
             try:
                 tables_dict[tid] = load_json(file_p)
             except Exception as e:
