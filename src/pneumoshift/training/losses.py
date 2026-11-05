@@ -68,10 +68,15 @@ class MaskedBCEWithLogitsLoss(nn.Module):
         # Ensure target values are clamped to [0, 1] in case -1 is passed
         clamped_targets = torch.clamp(targets, min=0.0, max=1.0)
 
+        # Ensure pos_weight matches logits device
+        pos_weight = self.pos_weight
+        if pos_weight is not None and pos_weight.device != logits.device:
+            pos_weight = pos_weight.to(logits.device)
+
         loss_elements = nn.functional.binary_cross_entropy_with_logits(
             logits,
             clamped_targets,
-            pos_weight=self.pos_weight,
+            pos_weight=pos_weight,
             reduction="none",
         )
 

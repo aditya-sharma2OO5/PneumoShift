@@ -42,9 +42,14 @@ class Trainer:
         self.label_cols = label_cols or SHARED_CLASSES
 
         self.model.to(self.device)
-        self.scaler = torch.cuda.amp.GradScaler(
-            enabled=self.config.get("train", {}).get("mixed_precision", True) and self.device.type == "cuda"
-        )
+        if isinstance(self.criterion, nn.Module):
+            self.criterion.to(self.device)
+
+        use_amp = self.config.get("train", {}).get("mixed_precision", True) and self.device.type == "cuda"
+        if hasattr(torch, "amp") and hasattr(torch.amp, "GradScaler"):
+            self.scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
+        else:
+            self.scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
         checkpoint_dir = self.config.get("train", {}).get("checkpoint_dir", "results/runs/checkpoints")
         primary_monitor = self.config.get("train", {}).get("save_best_metric", "val_macro_auroc")
@@ -74,7 +79,12 @@ class Trainer:
             if masks is not None:
                 masks = masks.to(self.device)
 
-            with torch.cuda.amp.autocast(enabled=self.scaler.is_enabled()):
+            amp_ctx = (
+                torch.amp.autocast("cuda", enabled=self.scaler.is_enabled())
+                if hasattr(torch, "amp") and hasattr(torch.amp, "autocast")
+                else torch.cuda.amp.autocast(enabled=self.scaler.is_enabled())
+            )
+            with amp_ctx:
                 logits = self.model(images)
                 if masks is not None:
                     try:
