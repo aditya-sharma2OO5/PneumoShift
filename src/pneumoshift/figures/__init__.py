@@ -16,6 +16,17 @@ from pneumoshift.figures.config_schemas import (
     validate_global_figure_config,
     validate_plot_style,
 )
+from pneumoshift.figures.plotters import (
+    apply_publication_theme,
+    export_figure,
+    generate_all_figures,
+    plot_fig1_study_overview,
+    plot_fig2_roc_pr_curves,
+    plot_fig3_calibration_reliability,
+    plot_fig4_threshold_transfer_discordance,
+    plot_fig5_architecture_and_uncertainty,
+    plot_fig6_explainability_and_shortcuts,
+)
 
 __all__ = [
     "DEFAULT_PRESET_DIMS",
@@ -32,5 +43,14 @@ __all__ = [
     "validate_figure_spec",
     "validate_global_figure_config",
     "validate_plot_style",
+    "apply_publication_theme",
+    "export_figure",
+    "generate_all_figures",
+    "plot_fig1_study_overview",
+    "plot_fig2_roc_pr_curves",
+    "plot_fig3_calibration_reliability",
+    "plot_fig4_threshold_transfer_discordance",
+    "plot_fig5_architecture_and_uncertainty",
+    "plot_fig6_explainability_and_shortcuts",
 ]
 
