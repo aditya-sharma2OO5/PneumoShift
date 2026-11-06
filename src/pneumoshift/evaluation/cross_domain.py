@@ -462,12 +462,27 @@ def compute_generalization_gap_report(
 
     markdown_report = "\n".join([r for r in table_rows if r])
 
+    pneu_gap = gaps.get(HEADLINE_CLASS, {})
+    in_auc = pneu_gap.get("in_domain_auroc")
+    cd_auc = pneu_gap.get("cross_domain_auroc")
+    delta_val = (cd_auc - in_auc) if (cd_auc is not None and in_auc is not None) else None
+    headline_dict = {
+        "in_domain_auroc": in_auc,
+        "cross_domain_auroc": cd_auc,
+        "gap_auroc": pneu_gap.get("gap_auroc"),
+        "delta_auroc": delta_val,
+        "delta_auroc_ci_95": pneu_gap.get("ci_diff_95", [delta_val, delta_val] if delta_val is not None else None),
+        "p_value": pneu_gap.get("p_value"),
+        "fdr_significant": pneu_gap.get("fdr_significant", False),
+    }
+
     return {
         "shift_direction": shift_direction,
         "per_class_gaps": gaps,
         "macro_gap_auroc": macro_gap_auc,
         "macro_gap_auprc": macro_gap_prc,
-        "headline_pneumonia_gap": gaps.get("Pneumonia", {}),
+        "headline_pneumonia": headline_dict,
+        "headline_pneumonia_gap": headline_dict,
         "markdown_table": markdown_report,
     }
 

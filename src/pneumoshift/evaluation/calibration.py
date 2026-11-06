@@ -131,14 +131,13 @@ class TemperatureScaling:
             return 1.0
 
         def nll_loss(t: np.ndarray) -> float:
-            scaled_z = z_v / max(float(t[0]), 1e-4)
-            max_z = np.maximum(scaled_z, 0)
-            log_p = -max_z - np.log(np.exp(-max_z) + np.exp(scaled_z - max_z))
-            log_1_p = scaled_z - max_z - np.log(np.exp(-max_z) + np.exp(scaled_z - max_z))
-            loss = -(y_v * log_p + (1.0 - y_v) * log_1_p)
+            temp = max(float(t[0]), 1e-3)
+            scaled_z = z_v / temp
+            # Numerically stable binary cross-entropy with logits: max(z, 0) - z * y + log(1 + exp(-|z|))
+            loss = np.maximum(scaled_z, 0.0) - scaled_z * y_v + np.log1p(np.exp(-np.abs(scaled_z)))
             return float(np.mean(loss))
 
-        res = scipy.optimize.minimize(nll_loss, x0=np.array([1.0]), bounds=[(0.01, 10.0)], method="L-BFGS-B")
+        res = scipy.optimize.minimize(nll_loss, x0=np.array([1.0]), bounds=[(0.05, 5.0)], method="L-BFGS-B")
         return float(res.x[0])
 
     def fit(self, logits: np.ndarray, labels: np.ndarray) -> "TemperatureScaling":

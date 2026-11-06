@@ -600,13 +600,27 @@ def main() -> None:
     )
 
     # 10. Compile Master Summary JSON
+    pneu_gap_info = (
+        gen_gap_report.get("headline_pneumonia")
+        or gen_gap_report.get("headline_pneumonia_gap")
+        or gen_gap_report.get("per_class_gaps", {}).get(HEADLINE_CLASS, {})
+    )
+    pneu_in = pneu_gap_info.get("in_domain_auroc")
+    pneu_cross = pneu_gap_info.get("cross_domain_auroc")
+    pneu_delta = pneu_gap_info.get("delta_auroc")
+    if pneu_delta is None and pneu_cross is not None and pneu_in is not None:
+        pneu_delta = pneu_cross - pneu_in
+    elif pneu_delta is None and pneu_gap_info.get("gap_auroc") is not None:
+        pneu_delta = -pneu_gap_info["gap_auroc"]
+
     headline_pneumonia = {
         "finding": HEADLINE_CLASS,
-        "gap": gen_gap_report.get("headline_pneumonia", {}),
-        "in_domain_auroc": gen_gap_report.get("headline_pneumonia", {}).get("in_domain_auroc", float("nan")),
-        "cross_domain_auroc": gen_gap_report.get("headline_pneumonia", {}).get("cross_domain_auroc", float("nan")),
-        "delta_auroc": gen_gap_report.get("headline_pneumonia", {}).get("delta_auroc", float("nan")),
-        "calibration": calib_report.get("headline_pneumonia", {}),
+        "gap": pneu_gap_info,
+        "in_domain_auroc": pneu_in if pneu_in is not None else float("nan"),
+        "cross_domain_auroc": pneu_cross if pneu_cross is not None else float("nan"),
+        "delta_auroc": pneu_delta if pneu_delta is not None else float("nan"),
+        "delta_auroc_ci_95": pneu_gap_info.get("delta_auroc_ci_95", pneu_gap_info.get("ci_diff_95")),
+        "calibration": calib_report.get("per_class", {}).get(HEADLINE_CLASS, {}),
         "threshold_transfer": thresh_report.get("headline_pneumonia", {}),
         "subgroups": domain_report.get("headline_pneumonia", {}),
     }

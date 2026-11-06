@@ -75,10 +75,24 @@ def check_generalization_gap_bounds(
       - NIH -> CheXpert (Tayebi Arasteh et al. 2023): expected drop -0.06 to -0.16
       - CheXpert -> NIH (Tayebi Arasteh et al. 2023): expected drop -0.07 to -0.16
     """
-    pneu_data = gap_data.get("headline_pneumonia", {})
-    delta_auc = pneu_data.get("delta_auroc", None)
+    pneu_data = (
+        gap_data.get("headline_pneumonia")
+        or gap_data.get("headline_pneumonia_gap")
+        or gap_data.get("per_class_gaps", {}).get("Pneumonia", {})
+    )
     in_auc = pneu_data.get("in_domain_auroc", None)
     cd_auc = pneu_data.get("cross_domain_auroc", None)
+    delta_auc = pneu_data.get("delta_auroc", None)
+
+    if delta_auc is None:
+        if in_auc is not None and cd_auc is not None:
+            delta_auc = float(cd_auc - in_auc)
+        elif pneu_data.get("gap_auroc") is not None:
+            delta_auc = -float(pneu_data["gap_auroc"])
+
+    # If delta was stored as positive gap (in - cross = +0.1473), normalize to change (cross - in = -0.1473)
+    if delta_auc is not None and delta_auc > 0 and (in_auc is not None and cd_auc is not None and cd_auc < in_auc):
+        delta_auc = -delta_auc
 
     if delta_auc is None:
         return {
@@ -92,7 +106,8 @@ def check_generalization_gap_bounds(
     expected_max_drop = -0.03
 
     in_bounds = expected_min_drop <= delta_auc <= expected_max_drop
-    has_bootstrap_ci = "delta_auroc_ci_95" in pneu_data and len(pneu_data["delta_auroc_ci_95"]) == 2
+    ci_95 = pneu_data.get("delta_auroc_ci_95") or pneu_data.get("ci_diff_95")
+    has_bootstrap_ci = ci_95 is not None and len(ci_95) == 2
 
     failures = []
     if not in_bounds:
