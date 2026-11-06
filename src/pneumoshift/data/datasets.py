@@ -60,10 +60,24 @@ class ChestXrayDataset(Dataset):
         p = Path(raw_path)
         if p.is_file():
             return p
-        if self.images_dir and (self.images_dir / p.name).is_file():
-            return self.images_dir / p.name
-        if self.images_dir and (self.images_dir / p).is_file():
-            return self.images_dir / p
+        if self.images_dir:
+            # 1. Direct relative match
+            candidate = self.images_dir / p
+            if candidate.is_file():
+                return candidate
+            # 2. Filename-only match (flat directory, e.g. /tmp/nih_images)
+            candidate = self.images_dir / p.name
+            if candidate.is_file():
+                return candidate
+            # 3. Parent directory match (e.g. images_dir is CheXpert-v1.0-small and p starts with CheXpert-v1.0-small)
+            candidate = self.images_dir.parent / p
+            if candidate.is_file():
+                return candidate
+            # 4. Subdirectory suffix match (stripping duplicated top folder name)
+            if len(p.parts) > 1:
+                candidate = self.images_dir / Path(*p.parts[1:])
+                if candidate.is_file():
+                    return candidate
         return p
 
     def _load_image(self, img_path: Path, idx: int) -> Image.Image:
