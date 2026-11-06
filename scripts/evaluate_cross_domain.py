@@ -88,6 +88,18 @@ def parse_args() -> argparse.Namespace:
         help="Uncertainty evaluation policy override",
     )
     parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=None,
+        help="Batch size for evaluation data loaders (default from config or 64)",
+    )
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=None,
+        help="Number of DataLoader worker processes (default from config or 4)",
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=42,
@@ -417,7 +429,10 @@ def main() -> None:
     arch = src_model_cfg.get("architecture", "densenet121")
     tgt_data_cfg = cfg["target_data"]
     img_size = tgt_data_cfg.get("image_size", 224)
-    batch_size = tgt_data_cfg.get("batch_size", 32)
+    batch_size = args.batch_size or tgt_data_cfg.get("batch_size", 64)
+    num_workers = args.num_workers if args.num_workers is not None else tgt_data_cfg.get("num_workers", 4)
+    pin_memory = torch.cuda.is_available()
+    persistent_workers = num_workers > 0
     classes = tgt_data_cfg.get("shared_classes", SHARED_CLASSES)
     num_classes = len(classes)
 
@@ -438,35 +453,61 @@ def main() -> None:
     # Target test split
     df_tgt_test = pd.read_csv(paths["target_test_csv"])
     ds_tgt_test = ChestXrayDataset(df_tgt_test, images_dir=paths["images_dir"], transform=transform)
-    loader_tgt_test = DataLoader(ds_tgt_test, batch_size=batch_size, shuffle=False, num_workers=0)
+    loader_tgt_test = DataLoader(
+        ds_tgt_test,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=persistent_workers,
+    )
 
     # Target cal split (10% holdout for oracle recalibration)
     df_tgt_cal = pd.read_csv(paths["target_cal_csv"]) if paths["target_cal_csv"].is_file() else None
     loader_tgt_cal = None
     if df_tgt_cal is not None:
         ds_tgt_cal = ChestXrayDataset(df_tgt_cal, images_dir=paths["images_dir"], transform=transform)
-        loader_tgt_cal = DataLoader(ds_tgt_cal, batch_size=batch_size, shuffle=False, num_workers=0)
+        loader_tgt_cal = DataLoader(
+            ds_tgt_cal,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            persistent_workers=persistent_workers,
+        )
 
     # Source validation split (for in-domain baseline, source temp scaling, and threshold search)
     df_src_val = pd.read_csv(paths["source_val_csv"]) if paths["source_val_csv"].is_file() else None
     loader_src_val = None
     if df_src_val is not None:
-        ds_src_val = ChestXrayDataset(df_src_val, images_dir=paths["images_dir"], transform=transform)
-        loader_src_val = DataLoader(ds_src_val, batch_size=batch_size, shuffle=False, num_workers=0)
+        src_img_dir = paths.get("source_images_dir") or paths["images_dir"]
+        ds_src_val = ChestXrayDataset(df_src_val, images_dir=src_img_dir, transform=transform)
+        loader_src_val = DataLoader(
+            ds_src_val,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            persistent_workers=persistent_workers,
+        )
 
     # 5. Execute forward inference
     logger.info("Extracting predictions and penultimate embeddings on Target Test Cohort (%d samples)...", len(df_tgt_test))
-    tgt_logits, tgt_probs, tgt_targets, tgt_feats = extract_cross_domain_predictions(model, loader_tgt_test, device)
+    tgt_logits, tgt_probs, tgt_targets, tgt_feats = extract_cross_domain_predictions(
+        model, loader_tgt_test, device, desc="Target Test Cohort"
+    )
 
     cal_logits, cal_probs, cal_targets, _ = (
-        extract_cross_domain_predictions(model, loader_tgt_cal, device)
+        extract_cross_domain_predictions(model, loader_tgt_cal, device, desc="Target Cal Cohort")
         if loader_tgt_cal is not None
         else (None, None, None, None)
     )
 
     if loader_src_val is not None:
         logger.info("Extracting predictions on Source Validation Cohort (%d samples)...", len(df_src_val))
-        src_logits, src_probs, src_targets, src_feats = extract_cross_domain_predictions(model, loader_src_val, device)
+        src_logits, src_probs, src_targets, src_feats = extract_cross_domain_predictions(
+            model, loader_src_val, device, desc="Source Val Cohort"
+        )
     else:
         logger.info("Synthesizing source validation baseline for dry run...")
         np.random.seed(args.seed)

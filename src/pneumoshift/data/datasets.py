@@ -44,6 +44,7 @@ class ChestXrayDataset(Dataset):
         self.transform = transform
         self.headline_only = headline_only
         self.cache_dir = Path(cache_dir) if cache_dir else None
+        self._path_cache: Dict[str, Path] = {}
 
         if self.cache_dir:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -57,27 +58,48 @@ class ChestXrayDataset(Dataset):
         return len(self.df)
 
     def _resolve_image_path(self, raw_path: str) -> Path:
+        if raw_path in self._path_cache:
+            return self._path_cache[raw_path]
+
         p = Path(raw_path)
         if p.is_file():
+            self._path_cache[raw_path] = p
             return p
+
         if self.images_dir:
+            # 0. Fast-path: Strip duplicated root folder name (e.g. CheXpert-v1.0-small/train/...)
+            if len(p.parts) > 1 and p.parts[0] == self.images_dir.name:
+                cand = self.images_dir / Path(*p.parts[1:])
+                if cand.is_file():
+                    self._path_cache[raw_path] = cand
+                    return cand
+
             # 1. Direct relative match
             candidate = self.images_dir / p
             if candidate.is_file():
+                self._path_cache[raw_path] = candidate
                 return candidate
-            # 2. Filename-only match (flat directory, e.g. /tmp/nih_images)
-            candidate = self.images_dir / p.name
-            if candidate.is_file():
-                return candidate
-            # 3. Parent directory match (e.g. images_dir is CheXpert-v1.0-small and p starts with CheXpert-v1.0-small)
+
+            # 2. Parent directory match (e.g. images_dir is CheXpert-v1.0-small and p starts with CheXpert-v1.0-small)
             candidate = self.images_dir.parent / p
             if candidate.is_file():
+                self._path_cache[raw_path] = candidate
                 return candidate
-            # 4. Subdirectory suffix match (stripping duplicated top folder name)
+
+            # 3. Filename-only match (flat directory, e.g. /tmp/nih_images)
+            candidate = self.images_dir / p.name
+            if candidate.is_file():
+                self._path_cache[raw_path] = candidate
+                return candidate
+
+            # 4. Subdirectory suffix match (stripping generic top folder name)
             if len(p.parts) > 1:
                 candidate = self.images_dir / Path(*p.parts[1:])
                 if candidate.is_file():
+                    self._path_cache[raw_path] = candidate
                     return candidate
+
+        self._path_cache[raw_path] = p
         return p
 
     def _load_image(self, img_path: Path, idx: int) -> Image.Image:

@@ -1,6 +1,7 @@
 """Cross-dataset evaluation harness, configuration validation, and path resolution."""
 
 from pathlib import Path
+import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 import numpy as np
 import torch
@@ -146,6 +147,11 @@ def resolve_cross_domain_paths(
     target_cal_csv = splits_dir / f"{tgt_ds}_{cal_split_name}.csv"
     target_off_val_csv = splits_dir / f"{tgt_ds}_{off_val_split_name}.csv"
     images_dir = Path(tgt_data.get("images_dir", ""))
+    src_images_dir = Path(
+        src_model.get("source_images_dir")
+        or src_model.get("images_dir")
+        or ("/tmp/nih_images" if Path("/tmp/nih_images").is_dir() else f"data/{src_ds}/images")
+    )
 
     out_dir = Path(cfg["outputs"]["output_dir"])
     figures_dir = Path(cfg["outputs"].get("figures_dir", out_dir / "figures"))
@@ -163,6 +169,7 @@ def resolve_cross_domain_paths(
         target_cal_csv = synth_dir / "splits" / "synthetic_target_cal.csv"
         target_off_val_csv = synth_dir / "splits" / "synthetic_official_val.csv"
         images_dir = synth_dir / "images"
+        src_images_dir = synth_dir / "images"
 
     out_dir.mkdir(parents=True, exist_ok=True)
     figures_dir.mkdir(parents=True, exist_ok=True)
@@ -175,6 +182,7 @@ def resolve_cross_domain_paths(
         "target_cal_csv": target_cal_csv,
         "target_off_val_csv": target_off_val_csv,
         "images_dir": images_dir,
+        "source_images_dir": src_images_dir,
         "output_dir": out_dir,
         "figures_dir": figures_dir,
         "is_synthetic": use_synthetic,
@@ -186,6 +194,7 @@ def extract_cross_domain_predictions(
     model: nn.Module,
     loader: DataLoader,
     device: torch.device,
+    desc: str = "Inference",
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Runs forward inference across loader to extract logits, calibrated probs, targets, and features.
 
@@ -197,20 +206,49 @@ def extract_cross_domain_predictions(
     all_targets: List[np.ndarray] = []
     all_features: List[np.ndarray] = []
 
+    total_batches = len(loader)
+    total_samples = len(loader.dataset) if hasattr(loader, "dataset") else total_batches * (loader.batch_size or 1)
+    batch_size = loader.batch_size or 1
+
+    log_interval = max(1, 25 if total_batches >= 80 else 10)
+    start_time = time.time()
+    logger.info("[%s] Beginning inference across %d samples (%d batches, batch_size=%d)...", desc, total_samples, total_batches, batch_size)
+
     with torch.no_grad():
-        for batch in loader:
-            imgs = batch["image"].to(device)
-            targets = batch["target"].to(device)
+        for step, batch in enumerate(loader):
+            imgs = batch["image"].to(device, non_blocking=True)
+            targets = batch["target"].to(device, non_blocking=True)
             logits, feats = model(imgs, return_features=True)
 
             all_logits.append(logits.cpu().numpy())
             all_targets.append(targets.cpu().numpy())
             all_features.append(feats.cpu().numpy())
 
+            if (step + 1) % log_interval == 0 or (step + 1) == total_batches:
+                elapsed = time.time() - start_time
+                done_batches = step + 1
+                pct = 100.0 * done_batches / total_batches
+                done_samples = min(done_batches * batch_size, total_samples)
+                rate = done_samples / max(0.001, elapsed)
+                remaining_sec = (total_samples - done_samples) / max(0.1, rate)
+                logger.info(
+                    "[%s] Batch [%3d/%3d] (%5.1f%%) | %d/%d images | %.1f img/s | ETA: %.0fs",
+                    desc,
+                    done_batches,
+                    total_batches,
+                    pct,
+                    done_samples,
+                    total_samples,
+                    rate,
+                    remaining_sec,
+                )
+
     logits = np.vstack(all_logits)
     targets = np.vstack(all_targets)
     features = np.vstack(all_features)
     probs = 1.0 / (1.0 + np.exp(-np.clip(logits, -20.0, 20.0)))
+    total_time = time.time() - start_time
+    logger.info("[%s] Completed inference in %.1fs (%.1f img/s).", desc, total_time, total_samples / max(0.001, total_time))
     return logits, probs, targets, features
 
 

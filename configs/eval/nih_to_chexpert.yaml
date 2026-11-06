@@ -13,6 +13,7 @@ source_model:
   dropout: 0.2
   checkpoint_path: "results/runs/nih_densenet121/checkpoints/checkpoint_best.pt"
   source_val_csv: "data/splits/nih/nih_val.csv"
+  source_images_dir: "/tmp/nih_images"
   source_test_metrics: "results/runs/nih_densenet121/test_metrics_densenet121_42.json"
   target_layer: "features.norm5"
 
