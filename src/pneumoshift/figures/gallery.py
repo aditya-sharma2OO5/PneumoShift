@@ -313,6 +313,20 @@ def build_gallery_html(
       display: flex;
       flex-direction: column;
     }
+    .figure-card.featured-overview {
+      grid-column: 1 / -1;
+    }
+    .figure-card.featured-overview .figure-preview {
+      min-height: 480px;
+      padding: 24px;
+      background-color: #FFFFFF;
+    }
+    .figure-card.featured-overview .figure-preview img {
+      max-width: 100%;
+      height: auto;
+      max-height: 620px;
+      object-fit: contain;
+    }
     .figure-header { padding: 16px 20px; border-bottom: 1px solid var(--border-color); }
     .figure-title { font-size: 1.0rem; font-weight: 700; color: #FFFFFF; }
     .figure-preview {
@@ -619,13 +633,19 @@ def build_gallery_html(
         pdf_rel = f"../results/figures/{stem}.pdf"
         svg_rel = f"../results/figures/{stem}.svg"
 
+        is_fig1 = (stem == "fig1_study_overview")
+        card_class = "figure-card featured-overview" if is_fig1 else "figure-card"
+        default_img = svg_rel if is_fig1 else png_rel
+        fallback_img = png_rel if is_fig1 else svg_rel
+        modal_target = svg_rel if is_fig1 else png_rel
+
         html_parts.append(f"""
-        <div class="figure-card">
+        <div class="{card_class}">
           <div class="figure-header">
             <div class="figure-title">{title}</div>
           </div>
-          <div class="figure-preview" onclick="openModal('{png_rel}', '{title}')">
-            <img src="{png_rel}" alt="{title}" onerror="this.onerror=null; this.src='{svg_rel}';">
+          <div class="figure-preview" onclick="openModal('{modal_target}', '{title}')">
+            <img src="{default_img}" alt="{title}" onerror="this.onerror=null; this.src='{fallback_img}';">
           </div>
           <div class="figure-footer">
             <p class="figure-caption">{caption}</p>

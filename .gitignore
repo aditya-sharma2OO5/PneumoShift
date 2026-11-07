@@ -228,6 +228,7 @@ __marimo__/
 /results/tables/xai/
 /results/tables/master/
 /results/tables/audit_synthetic/
+/results/tables/audit_chexpert/
 /results/tables/*.json
 /results/*.json
 

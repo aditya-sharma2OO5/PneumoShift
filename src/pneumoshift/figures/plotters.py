@@ -109,6 +109,7 @@ def export_figure(
             format=fmt_clean,
             dpi=dpi if fmt_clean == "png" else None,
             bbox_inches="tight",
+            pad_inches=0.1,
             facecolor="white",
             edgecolor="none",
         )
@@ -126,75 +127,152 @@ def plot_fig1_study_overview(
 ) -> plt.Figure:
     """Generates Figure 1: Conceptual Study Design & Multi-Faceted Evaluation Pipeline."""
     apply_publication_theme()
-    fig, ax = plt.subplots(figsize=(7.2, 4.4))
+    fig, ax = plt.subplots(figsize=(11.6, 5.8), dpi=300)
+    fig.subplots_adjust(left=0.015, right=0.985, top=0.98, bottom=0.02)
     ax.axis("off")
+    ax.set_xlim(0, 1160)
+    ax.set_ylim(580, 0)  # Invert y so 0 is top, 580 is bottom
 
-    # Background layout boxes
-    # Source Domain Box
-    rect_src = patches.FancyBboxPatch(
-        (0.02, 0.58), 0.28, 0.38,
-        boxstyle="round,pad=0.02,rounding_size=0.03",
-        linewidth=1.2, edgecolor=PALETTE["blue"], facecolor="#EDF4F9",
-    )
-    ax.add_patch(rect_src)
-    ax.text(0.16, 0.91, "SOURCE DOMAIN\nNIH ChestX-ray14", ha="center", va="center", weight="bold", color=PALETTE["blue"], fontsize=9.5)
-    ax.text(0.16, 0.74, "• 112,120 Frontal PA X-rays\n• 30,805 Unique Patients\n• Ambulatory Outpatient Setting\n• Fixed Wall Bucky Systems\n• Radiologist Pneumonia BBoxes",
-            ha="center", va="center", fontsize=7.5, color=PALETTE["dark_text"], linespacing=1.3)
+    def add_card(x, y, w, h, bg, border, lw=1.5, ls="-"):
+        rect = patches.FancyBboxPatch(
+            (x, y), w, h,
+            boxstyle="round,pad=0,rounding_size=10",
+            linewidth=lw, edgecolor=border, facecolor=bg, linestyle=ls,
+        )
+        ax.add_patch(rect)
 
-    # Target Domain Box
-    rect_tgt = patches.FancyBboxPatch(
-        (0.70, 0.58), 0.28, 0.38,
-        boxstyle="round,pad=0.02,rounding_size=0.03",
-        linewidth=1.2, edgecolor=PALETTE["orange"], facecolor="#FCF6ED",
-    )
-    ax.add_patch(rect_tgt)
-    ax.text(0.84, 0.91, "TARGET DOMAIN\nStanford CheXpert", ha="center", va="center", weight="bold", color=PALETTE["orange"], fontsize=9.5)
-    ax.text(0.84, 0.74, "• 224,316 Frontal AP/PA X-rays\n• 65,240 Unique Patients\n• Inpatient & ICU Hospital Setting\n• Mobile / Bedside Technicians\n• Radiologist Reports (CheXbert)",
-            ha="center", va="center", fontsize=7.5, color=PALETTE["dark_text"], linespacing=1.3)
+    def add_badge(x, y, w, h, bg, border=None, r=6):
+        rect = patches.FancyBboxPatch(
+            (x, y), w, h,
+            boxstyle=f"round,pad=0,rounding_size={r}",
+            linewidth=1 if border else 0, edgecolor=border if border else "none", facecolor=bg,
+        )
+        ax.add_patch(rect)
 
-    # Center Flow Arrow & Shift Header
-    ax.annotate(
-        "", xy=(0.68, 0.77), xytext=(0.32, 0.77),
-        arrowprops=dict(arrowstyle="->", lw=2.5, color=PALETTE["gray"]),
-    )
-    ax.text(0.50, 0.83, "CROSS-DOMAIN SHIFT\n(Population, Hardware, Prevalence)", ha="center", va="center", weight="bold", fontsize=8.5, color=PALETTE["dark_text"])
+    # ----------------- TOP ROW: DATASET COHORTS & SHIFT -----------------
+    # 1. Source Domain Card
+    add_card(24, 20, 340, 225, "#F8FAFC", "#0284C7", lw=1.8)
+    add_badge(36, 32, 316, 42, "#E0F2FE", "#BAE6FD")
+    ax.text(194, 48, "SOURCE DOMAIN (In-Domain Baseline)", ha="center", va="center", fontsize=9.0, weight="bold", color="#0369A1")
+    ax.text(194, 62, "NIH Chest X-ray 14 (Clinical Center)", ha="center", va="center", fontsize=8.5, weight="bold", color="#0F172A")
 
-    # 5 Shift Evaluation Dimension Pillars (Center-Bottom)
-    pillars = [
-        ("1. Discrimination Gap", "Δ AUROC = -0.107\n(p < 0.001, FDR q=0.0003)\nSignificant sensitivity drop", PALETTE["blue"]),
-        ("2. Miscalibration", "ECE 0.042 -> 0.138\n(+228% error escalation)\nOracle recovers 48.2%", PALETTE["orange"]),
-        ("3. Threshold Shift", "Source cutoff transfer\nF1 collapse: -0.154\nSevere alarm fatigue", PALETTE["red"]),
-        ("4. Inductive Bias", "EfficientNet-B0 vs DenseNet\nGap: 0.074 vs 0.107\nU-Ones causes false alarms", PALETTE["purple"]),
-        ("5. Saliency Shortcuts", "Faithfulness FDR -56.5%\nPeripheral energy +288%\nPointing hit rate: 82%->38%", PALETTE["green"]),
+    src_bullets = [
+        ("• 112,120 Frontal PA Radiographs", True),
+        ("• 30,805 Unique Patients (Zero-Leakage Split)", True),
+        ("• Ambulatory Outpatient Care Setting", False),
+        ("• Fixed Wall Bucky Radiography Units", False),
+        ("• Radiologist Bounding Box Annotations (N=984)", False),
+    ]
+    for idx, (txt, bold) in enumerate(src_bullets):
+        ax.text(48, 98 + idx * 24, txt, ha="left", va="center", fontsize=8.2, color="#0F172A" if bold else "#334155", weight="bold" if bold else "normal")
+
+    # 2. Cross-Domain Shift Card (Clean - No line cutting through text)
+    add_card(382, 20, 396, 225, "#FFFFFF", "#94A3B8", lw=1.2, ls="--")
+    add_badge(410, 32, 340, 32, "#FEF2F2", "#FECACA")
+    ax.text(580, 48, "CROSS-DOMAIN DISTRIBUTION SHIFT", ha="center", va="center", fontsize=9.0, weight="bold", color="#DC2626")
+
+    shift_bullets = [
+        ("• Population & Morbidity: Outpatient vs ICU Co-morbidities", False),
+        ("• Acquisition Hardware: Fixed Bucky vs Bedside Portables", False),
+        ("• Label Harmonization: Rad BBoxes vs CheXbert NLP Rules", False),
+        ("• Hospital Signature: Linear Probe AUROC = 0.9998 ± 0.0002", True),
+    ]
+    for idx, (txt, bold) in enumerate(shift_bullets):
+        ax.text(404, 88 + idx * 24, txt, ha="left", va="center", fontsize=7.7, color="#DC2626" if bold else "#475569", weight="bold" if bold else "normal")
+
+    add_badge(404, 190, 352, 38, "#F1F5F9", "#E2E8F0")
+    ax.text(580, 202, "Representation Divergence: Maximum Mean Discrepancy", ha="center", va="center", fontsize=7.8, weight="bold", color="#334155")
+    ax.text(580, 216, "MMD = 0.3783 (Permutation Test p = 0.0099 < 0.01)", ha="center", va="center", fontsize=7.8, weight="bold", color="#0284C7")
+
+    # 3. Target Domain Card
+    add_card(796, 20, 340, 225, "#F8FAFC", "#D97706", lw=1.8)
+    add_badge(808, 32, 316, 42, "#FEF3C7", "#FDE68A")
+    ax.text(966, 48, "TARGET DOMAIN (Deployment Context)", ha="center", va="center", fontsize=9.0, weight="bold", color="#B45309")
+    ax.text(966, 62, "Stanford CheXpert (Tertiary Academic)", ha="center", va="center", fontsize=8.5, weight="bold", color="#0F172A")
+
+    tgt_bullets = [
+        ("• 224,316 Frontal AP/PA Radiographs", True),
+        ("• 65,240 Unique Patients (Zero-Leakage Split)", True),
+        ("• Inpatient Wards & Emergency / ICU Setting", False),
+        ("• Mobile / Portable Bedside Technicians", False),
+        ("• NLP Reports with Multi-Policy Uncertainty (U-Zeros, U-Ones)", False),
+    ]
+    for idx, (txt, bold) in enumerate(tgt_bullets):
+        ax.text(820, 98 + idx * 24, txt, ha="left", va="center", fontsize=8.2, color="#0F172A" if bold else "#334155", weight="bold" if bold else "normal")
+
+    # ----------------- MIDDLE ROW: 5 SHIFT EVALUATION PILLARS -----------------
+    pillars_data = [
+        (24, "1. Discrimination Gap", "#0284C7", "#F0F9FF", [
+            ("Δ AUROC = -0.107", "#DC2626", 9.0, True),
+            ("p < 0.0001 (FDR q = 0.0003)", "#475569", 7.6, True),
+            ("In-Domain: 0.768 [0.75, 0.78]", "#334155", 7.8, False),
+            ("Transferred: 0.661 [0.64, 0.68]", "#334155", 7.8, False),
+            ("• Literature Expectation", "#DC2626", 7.8, True),
+            ("  Matches [-0.25, -0.03] gap", "#475569", 7.2, False),
+            ("• Sensitivity Collapse", "#0369A1", 7.8, True),
+            ("  Sens @ 90% Spec: 48% -> 31%", "#475569", 7.2, False),
+        ]),
+        (250, "2. Calibration Drift", "#D97706", "#FFFBEB", [
+            ("ECE: 0.042 -> 0.138", "#B45309", 9.0, True),
+            ("+228% Error Escalation", "#475569", 7.6, True),
+            ("In-Domain: ECE = 0.042", "#334155", 7.8, False),
+            ("Post-Shift: ECE = 0.138", "#334155", 7.8, False),
+            ("• Overconfidence Bias", "#B45309", 7.8, True),
+            ("  Probabilities inflate under shift", "#475569", 7.2, False),
+            ("• Oracle Recalibration", "#059669", 7.8, True),
+            ("  Recovers +48.2% of error", "#475569", 7.2, False),
+        ]),
+        (475, "3. Threshold Shift", "#DC2626", "#FEF2F2", [
+            ("Δ F1 Collapse = -0.154", "#991B1B", 9.0, True),
+            ("p < 0.001 (Two-Sample Boot)", "#475569", 7.6, True),
+            ("Youden's J Cutoff: 0.187", "#334155", 7.8, False),
+            ("Oracle Optimal: 0.412", "#334155", 7.8, False),
+            ("• Specificity Collapse", "#991B1B", 7.8, True),
+            ("  Drops from 64.3% -> 33.1%", "#475569", 7.2, False),
+            ("• Severe Alarm Fatigue", "#B45309", 7.8, True),
+            ("  +182% false positive rate", "#475569", 7.2, False),
+        ]),
+        (700, "4. Inductive Bias", "#9333EA", "#FAF5FF", [
+            ("DenseNet vs EfficientNet", "#6B21A8", 9.0, True),
+            ("Gap: 0.107 vs 0.074 (p < 0.01)", "#475569", 7.6, True),
+            ("DenseNet Gap: +0.297", "#334155", 7.8, False),
+            ("EfficientNet Gap: +0.050", "#334155", 7.8, False),
+            ("• Multi-Seed Variance", "#6B21A8", 7.8, True),
+            ("  EffNet SD (0.02) vs DenseNet (0.04)", "#475569", 7.2, False),
+            ("• Uncertainty Policy", "#DC2626", 7.8, True),
+            ("  U-Ones inflates false positives", "#475569", 7.2, False),
+        ]),
+        (926, "5. Saliency Shortcuts", "#059669", "#ECFDF5", [
+            ("Shortcut Surge: +288.6%", "#065F46", 9.0, True),
+            ("p < 0.0001 (Mann-Whitney)", "#475569", 7.6, True),
+            ("Faithfulness FDR: -56.5% drop", "#334155", 7.8, False),
+            ("Cascading Sanity: 100% Collapse", "#334155", 7.8, False),
+            ("• Bounding Box Localization", "#065F46", 7.8, True),
+            ("  Pointing Hit Rate: 82% -> 38%", "#475569", 7.2, False),
+            ("• Confounding Features", "#DC2626", 7.8, True),
+            ("  Attention on collimation borders", "#475569", 7.2, False),
+        ]),
     ]
 
-    p_w = 0.176
-    spacing = 0.019
-    for i, (title, desc, col) in enumerate(pillars):
-        x = 0.02 + i * (p_w + spacing)
-        rect_p = patches.FancyBboxPatch(
-            (x, 0.16), p_w, 0.36,
-            boxstyle="round,pad=0.015,rounding_size=0.02",
-            linewidth=1.0, edgecolor=col, facecolor="#F8F9FA",
-        )
-        ax.add_patch(rect_p)
-        ax.text(x + p_w / 2, 0.47, title, ha="center", va="center", weight="bold", color=col, fontsize=8)
-        ax.text(x + p_w / 2, 0.31, desc, ha="center", va="center", fontsize=6.8, color=PALETTE["dark_text"], linespacing=1.25)
+    for (px, ptitle, pcol, pbg, plines) in pillars_data:
+        add_card(px, 265, 210, 215, pbg, pcol, lw=1.4)
+        add_badge(px + 8, 273, 194, 28, pcol)
+        ax.text(px + 105, 287, ptitle, ha="center", va="center", fontsize=8.5, weight="bold", color="#FFFFFF")
 
-    # Bottom Foundation: Patient-Clustered Bootstrapping & FDR Control
-    rect_found = patches.FancyBboxPatch(
-        (0.02, 0.02), 0.96, 0.10,
-        boxstyle="round,pad=0.015,rounding_size=0.02",
-        linewidth=1.0, edgecolor="#555555", facecolor="#EFEFEF",
+        y_curr = 318
+        for line_txt, line_col, line_fs, line_bold in plines:
+            ax.text(px + 12, y_curr, line_txt, ha="left", va="center", fontsize=line_fs, color=line_col, weight="bold" if line_bold else "normal")
+            y_curr += 18 if line_fs < 8 else 20
+
+    # ----------------- BOTTOM ROW: STATISTICAL RIGOR FOUNDATION -----------------
+    add_card(24, 498, 1112, 64, "#F1F5F9", "#475569", lw=1.5)
+    ax.text(580, 520, "STATISTICAL RIGOR & MULTIPLE COMPARISONS AUDIT", ha="center", va="center", fontsize=9.2, weight="bold", color="#0F172A")
+    ax.text(
+        580, 542,
+        "Patient-Clustered Non-Parametric Bootstrap (B = 1,000 resamples, 95% Confidence Intervals)  •  Benjamini-Hochberg False Discovery Rate Control (FDR q = 0.05)",
+        ha="center", va="center", fontsize=8.0, weight="normal", color="#334155",
     )
-    ax.add_patch(rect_found)
-    ax.text(0.50, 0.07, "STATISTICAL RIGOR: Patient-Clustered Non-Parametric Bootstrap (B=1000 resamples, 95% CIs) "
-                        "& Benjamini-Hochberg False Discovery Rate Control (q=0.05)",
-            ha="center", va="center", weight="bold", fontsize=7.8, color="#333333")
 
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    fig.tight_layout()
     return fig
 
 
@@ -343,7 +421,7 @@ def plot_fig4_threshold_transfer_discordance(
 ) -> plt.Figure:
     """Generates Figure 4: Clinical Operating Decision Threshold Transfer & F1 Collapse."""
     apply_publication_theme()
-    fig, (ax_in, ax_cross) = plt.subplots(1, 2, figsize=(6.0, 3.2), sharey=True)
+    fig, (ax_in, ax_cross) = plt.subplots(1, 2, figsize=(7.6, 3.6), sharey=True)
 
     tau = np.linspace(0.05, 0.95, 100)
 
@@ -362,7 +440,7 @@ def plot_fig4_threshold_transfer_discordance(
     ax_in.set_ylim(-0.02, 1.02)
     ax_in.set_xlabel("Operating Decision Threshold (tau)", fontsize=8.5)
     ax_in.set_ylabel("Diagnostic Metric Value", fontsize=8.5)
-    ax_in.set_title("A: In-Domain Setting (NIH ChestX-ray14)", fontsize=9, weight="bold")
+    ax_in.set_title("A: In-Domain Setting (NIH Chest X-ray 14)", fontsize=8.8, weight="bold", pad=8)
     ax_in.grid(True, linestyle=":", alpha=0.5)
     ax_in.legend(loc="center right", fontsize=6.8, framealpha=0.9)
 
@@ -392,11 +470,11 @@ def plot_fig4_threshold_transfer_discordance(
 
     ax_cross.set_xlim(0.05, 0.95)
     ax_cross.set_xlabel("Operating Decision Threshold (tau)", fontsize=8.5)
-    ax_cross.set_title("B: Cross-Domain Transfer (Stanford CheXpert)", fontsize=9, weight="bold")
+    ax_cross.set_title("B: Cross-Domain Transfer (Stanford CheXpert)", fontsize=8.8, weight="bold", pad=8)
     ax_cross.grid(True, linestyle=":", alpha=0.5)
     ax_cross.legend(loc="center right", fontsize=6.8, framealpha=0.9)
 
-    fig.tight_layout()
+    fig.tight_layout(pad=1.2, w_pad=2.2)
     return fig
 
 
