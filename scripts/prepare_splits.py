@@ -87,6 +87,7 @@ def main() -> None:
             splits = {k: pd.read_csv(p) for k, p in paths.items() if k != "official_val"}
             run_data_audit(
                 splits=splits,
+                images_dir=args.chexpert_images_dir,
                 output_dir="results/tables/audit_chexpert",
                 generate_grid=True,
             )
