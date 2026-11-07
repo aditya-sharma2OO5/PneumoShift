@@ -172,17 +172,17 @@ def plot_fig1_study_overview(
     ax.text(580, 48, "CROSS-DOMAIN DISTRIBUTION SHIFT", ha="center", va="center", fontsize=9.0, weight="bold", color="#DC2626")
 
     shift_bullets = [
-        ("• Population & Morbidity: Outpatient vs ICU Co-morbidities", False),
-        ("• Acquisition Hardware: Fixed Bucky vs Bedside Portables", False),
-        ("• Label Harmonization: Rad BBoxes vs CheXbert NLP Rules", False),
-        ("• Hospital Signature: Linear Probe AUROC = 0.9998 ± 0.0002", True),
+        ("• Population: Outpatient vs ICU Co-morbidities", False),
+        ("• Hardware: Fixed Bucky vs Bedside Portables", False),
+        ("• Label Semantics: Rad BBoxes vs CheXbert NLP", False),
+        ("• Hospital Signature: Linear Probe AUROC = 0.9998", True),
     ]
     for idx, (txt, bold) in enumerate(shift_bullets):
-        ax.text(404, 88 + idx * 24, txt, ha="left", va="center", fontsize=7.7, color="#DC2626" if bold else "#475569", weight="bold" if bold else "normal")
+        ax.text(404, 88 + idx * 24, txt, ha="left", va="center", fontsize=7.5, color="#DC2626" if bold else "#475569", weight="bold" if bold else "normal")
 
-    add_badge(404, 190, 352, 38, "#F1F5F9", "#E2E8F0")
-    ax.text(580, 202, "Representation Divergence: Maximum Mean Discrepancy", ha="center", va="center", fontsize=7.8, weight="bold", color="#334155")
-    ax.text(580, 216, "MMD = 0.3783 (Permutation Test p = 0.0099 < 0.01)", ha="center", va="center", fontsize=7.8, weight="bold", color="#0284C7")
+    add_badge(394, 188, 372, 40, "#F1F5F9", "#E2E8F0")
+    ax.text(580, 201, "Representation Divergence (MMD)", ha="center", va="center", fontsize=7.6, weight="bold", color="#334155")
+    ax.text(580, 215, "MMD = 0.3783 (Permutation Test p = 0.0099 < 0.01)", ha="center", va="center", fontsize=7.2, weight="bold", color="#0284C7")
 
     # 3. Target Domain Card
     add_card(796, 20, 340, 225, "#F8FAFC", "#D97706", lw=1.8)
@@ -195,7 +195,7 @@ def plot_fig1_study_overview(
         ("• 65,240 Unique Patients (Zero-Leakage Split)", True),
         ("• Inpatient Wards & Emergency / ICU Setting", False),
         ("• Mobile / Portable Bedside Technicians", False),
-        ("• NLP Reports with Multi-Policy Uncertainty (U-Zeros, U-Ones)", False),
+        ("• NLP Policy Uncertainty (U-Zeros, U-Ones)", False),
     ]
     for idx, (txt, bold) in enumerate(tgt_bullets):
         ax.text(820, 98 + idx * 24, txt, ha="left", va="center", fontsize=8.2, color="#0F172A" if bold else "#334155", weight="bold" if bold else "normal")
