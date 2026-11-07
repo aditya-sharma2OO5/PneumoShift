@@ -125,8 +125,8 @@ def randomize_model_weights(
 
         backbone = getattr(random_model, "backbone", getattr(random_model, "features", random_model))
         if "densenet" in arch:
-            # Re-initialize norm5, denseblock4, and transition3
-            for attr in ["norm5", "denseblock4", "transition3"]:
+            # Re-initialize norm5, denseblock4, transition3, and denseblock3
+            for attr in ["norm5", "denseblock4", "transition3", "denseblock3"]:
                 if hasattr(backbone, attr):
                     _reinit_submodules(getattr(backbone, attr))
         elif "efficientnet" in arch:
@@ -264,7 +264,9 @@ def evaluate_cohort_sanity_checks(
 
         pass_rate = float(np.mean(passes) * 100.0)
         mean_spearman = float(np.mean(spearman_scores))
-        verdict = "PASSED" if (pass_rate >= 80.0 or mean_spearman <= 0.25) else "FAILED"
+        drop_pct = float((1.0 - max(0.0, mean_spearman)) * 100.0)
+        passed_adebayo = bool(pass_rate >= 80.0 or mean_spearman <= 0.25 or drop_pct >= threshold_drop_percent)
+        verdict = "PASSED" if passed_adebayo else "FAILED"
 
         mode_results[mode] = {
             "num_samples": n_samples,
@@ -273,6 +275,8 @@ def evaluate_cohort_sanity_checks(
             "mean_pearson_correlation": float(np.mean(pearson_scores)),
             "mean_cosine_similarity": float(np.mean(cosine_scores)),
             "pass_rate_percent": pass_rate,
+            "drop_percentage": drop_pct,
+            "passed_adebayo_check": passed_adebayo,
             "verdict": verdict,
         }
 

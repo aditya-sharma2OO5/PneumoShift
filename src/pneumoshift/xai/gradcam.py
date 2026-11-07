@@ -65,6 +65,10 @@ class GradCAMExplainer:
             if target_size is None:
                 target_size = (input_tensor.shape[2], input_tensor.shape[3])
 
+            device = next(self.model.parameters()).device
+            if input_tensor.device != device:
+                input_tensor = input_tensor.to(device)
+
             logits = self.model(input_tensor)
             if isinstance(logits, tuple):
                 logits = logits[0]
