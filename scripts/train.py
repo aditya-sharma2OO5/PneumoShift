@@ -4,7 +4,8 @@ import argparse
 import copy
 from pathlib import Path
 import shutil
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
+import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
@@ -14,6 +15,7 @@ from pneumoshift.data.harmonize_labels import HEADLINE_CLASS, SHARED_CLASSES
 from pneumoshift.data.splits import create_synthetic_dataset
 from pneumoshift.data.transforms import get_transforms
 from pneumoshift.evaluation.benchmarks import compare_against_benchmarks
+from pneumoshift.evaluation.thresholds import compute_optimal_thresholds
 from pneumoshift.models.factory import build_model
 from pneumoshift.training.losses import MaskedBCEWithLogitsLoss, compute_class_weights
 from pneumoshift.training.trainer import Trainer
@@ -33,6 +35,33 @@ def resolve_split_path(base_dir: Path, ds_name: str, split_name: str) -> Path:
     if sub.is_file():
         return sub
     return direct
+
+
+def extract_batch_predictions(
+    model: torch.nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+    df: pd.DataFrame,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Runs forward inference to extract logits, probabilities, ground-truth targets, features, and patient IDs."""
+    model.eval()
+    all_logits: List[np.ndarray] = []
+    all_targets: List[np.ndarray] = []
+    all_features: List[np.ndarray] = []
+    with torch.no_grad():
+        for batch in loader:
+            imgs = batch["image"].to(device)
+            tgts = batch["target"].to(device)
+            logits, feats = model(imgs, return_features=True)
+            all_logits.append(logits.cpu().numpy())
+            all_targets.append(tgts.cpu().numpy())
+            all_features.append(feats.cpu().numpy())
+    logits = np.vstack(all_logits)
+    targets = np.vstack(all_targets)
+    features = np.vstack(all_features)
+    probs = 1.0 / (1.0 + np.exp(-np.clip(logits, -20.0, 20.0)))
+    patient_ids = df["patient_id"].to_numpy() if "patient_id" in df.columns else np.arange(len(df))
+    return logits, probs, targets, features, patient_ids
 
 
 def parse_args() -> argparse.Namespace:
@@ -221,6 +250,51 @@ def main() -> None:
                 model.load_state_dict(ckpt["model_state_dict"])
                 logger.info("Loaded best model checkpoint from %s", best_ckpt_path)
 
+            pred_dir = Path("results/predictions")
+            pred_dir.mkdir(parents=True, exist_ok=True)
+
+            # 1. Extract and save Source Validation predictions & select tau strictly on source val
+            logger.info("Extracting raw prediction arrays on source validation split (seed=%d)...", seed)
+            v_logits, v_probs, v_targets, v_feats, v_patients = extract_batch_predictions(
+                model, val_loader, trainer.device, val_df
+            )
+            val_pred_path = pred_dir / f"predictions_val_{arch}_{seed}.npz"
+            np.savez_compressed(
+                val_pred_path,
+                y_true=v_targets,
+                y_score=v_probs,
+                y_logits=v_logits,
+                patient_ids=v_patients,
+                label_cols=np.array(label_cols),
+                features=v_feats,
+            )
+            shutil.copy2(val_pred_path, seed_run_dir / f"predictions_val_{arch}_{seed}.npz")
+            logger.info("Saved source validation prediction arrays (.npz) to %s", val_pred_path)
+
+            pneu_idx = label_cols.index("Pneumonia") if "Pneumonia" in label_cols else 0
+            raw_yt = v_targets[:, pneu_idx]
+            yt = np.where(raw_yt == -1.0, 0.0, raw_yt)
+            yp = v_probs[:, pneu_idx]
+            opt_th = compute_optimal_thresholds(yt, yp)
+            tau_data = {
+                "architecture": arch,
+                "seed": seed,
+                "dataset": ds_name,
+                "selection_split": "val",
+                "source_val_optimal_tau": float(opt_th["youden_threshold"]),
+                "youden_tau": float(opt_th["youden_threshold"]),
+                "youden_metrics": opt_th["youden"]["metrics"],
+                "max_f1_tau": float(opt_th["f1_threshold"]),
+                "max_f1_metrics": opt_th["max_f1"]["metrics"],
+                "sens90_tau": float(opt_th["sens90_threshold"]),
+                "sens90_metrics": opt_th["fixed_sensitivity"]["metrics"],
+                "description": "Selected strictly on source validation set (zero target leakage)",
+            }
+            save_json(tau_data, pred_dir / f"tau_selection_{arch}_{seed}.json")
+            save_json(tau_data, seed_run_dir / f"tau_selection_{arch}_{seed}.json")
+            logger.info("Selected source validation optimal threshold tau=%.3f (Youden) / %.3f (F1). Saved to %s",
+                        tau_data["youden_tau"], tau_data["max_f1_tau"], pred_dir / f"tau_selection_{arch}_{seed}.json")
+
             if args.smoke_test or seed_cfg.get("data", {}).get("dataset_name") == "synthetic":
                 test_csv = synth_dir / "splits" / "synthetic_test.csv"
             else:
@@ -233,6 +307,24 @@ def main() -> None:
                 test_trans = get_transforms(split="test", image_size=img_size)
                 test_ds = ChestXrayDataset(test_df, images_dir=img_dir, transform=test_trans, headline_only=headline_only, cache_dir=cache_dir)
                 test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+                # 2. Extract and save Source Test predictions
+                logger.info("Extracting raw prediction arrays on test split (seed=%d)...", seed)
+                t_logits, t_probs, t_targets, t_feats, t_patients = extract_batch_predictions(
+                    model, test_loader, trainer.device, test_df
+                )
+                test_pred_path = pred_dir / f"predictions_test_{arch}_{seed}.npz"
+                np.savez_compressed(
+                    test_pred_path,
+                    y_true=t_targets,
+                    y_score=t_probs,
+                    y_logits=t_logits,
+                    patient_ids=t_patients,
+                    label_cols=np.array(label_cols),
+                    features=t_feats,
+                )
+                shutil.copy2(test_pred_path, seed_run_dir / f"predictions_test_{arch}_{seed}.npz")
+                logger.info("Saved source test prediction arrays (.npz) to %s", test_pred_path)
 
                 eval_modes = seed_cfg.get("eval", {}).get("eval_uncertainty_modes", ["uncertain_excluded"])
                 if not isinstance(eval_modes, list):

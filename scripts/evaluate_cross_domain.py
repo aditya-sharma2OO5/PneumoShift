@@ -13,6 +13,7 @@ Orchestrates the complete Phase 3 cross-dataset evaluation pipeline:
 import argparse
 import csv
 from pathlib import Path
+import shutil
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
@@ -104,6 +105,11 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=42,
         help="Random seed for reproducibility",
+    )
+    parser.add_argument(
+        "--predictions_dir",
+        default="results/predictions",
+        help="Directory to save raw prediction arrays (.npz)",
     )
     return parser.parse_args()
 
@@ -526,6 +532,55 @@ def main() -> None:
     # Patient IDs
     tgt_patients = df_tgt_test["patient_id"].to_numpy() if "patient_id" in df_tgt_test.columns else np.arange(len(df_tgt_test))
     src_patients = df_src_val["patient_id"].to_numpy() if "patient_id" in df_src_val.columns else np.arange(len(df_src_val))
+
+    # Save raw prediction arrays (.npz) as the single source of truth for figures
+    pred_dir = Path(args.predictions_dir)
+    pred_dir.mkdir(parents=True, exist_ok=True)
+    eval_seed = args.seed if args.seed is not None else cfg.get("seed", 42)
+
+    tgt_pred_path = pred_dir / f"predictions_cross_domain_{arch}_{eval_seed}.npz"
+    np.savez_compressed(
+        tgt_pred_path,
+        y_true=tgt_targets,
+        y_score=tgt_probs,
+        y_logits=tgt_logits,
+        patient_ids=tgt_patients,
+        label_cols=np.array(classes),
+        features=tgt_feats,
+    )
+    logger.info("Saved raw target cross-domain predictions (.npz) to %s (samples: %d)", tgt_pred_path, len(df_tgt_test))
+    mirror_tgt_path = out_dir / f"predictions_cross_domain_{arch}_{eval_seed}.npz"
+    if mirror_tgt_path != tgt_pred_path:
+        shutil.copy2(tgt_pred_path, mirror_tgt_path)
+
+    if src_targets is not None:
+        src_pred_path = pred_dir / f"predictions_source_val_{arch}_{eval_seed}.npz"
+        np.savez_compressed(
+            src_pred_path,
+            y_true=src_targets,
+            y_score=src_probs,
+            y_logits=src_logits,
+            patient_ids=src_patients,
+            label_cols=np.array(classes),
+            features=src_feats,
+        )
+        logger.info("Saved raw source validation predictions (.npz) to %s (samples: %d)", src_pred_path, len(df_src_val))
+        mirror_src_path = out_dir / f"predictions_source_val_{arch}_{eval_seed}.npz"
+        if mirror_src_path != src_pred_path:
+            shutil.copy2(src_pred_path, mirror_src_path)
+
+    if cal_targets is not None and loader_tgt_cal is not None:
+        cal_patients = df_tgt_cal["patient_id"].to_numpy() if "patient_id" in df_tgt_cal.columns else np.arange(len(df_tgt_cal))
+        cal_pred_path = pred_dir / f"predictions_target_cal_{arch}_{eval_seed}.npz"
+        np.savez_compressed(
+            cal_pred_path,
+            y_true=cal_targets,
+            y_score=cal_probs,
+            y_logits=cal_logits,
+            patient_ids=cal_patients,
+            label_cols=np.array(classes),
+        )
+        logger.info("Saved raw target cal predictions (.npz) to %s", cal_pred_path)
 
     # Protocol parameters
     n_resamples = args.n_resamples or (25 if args.smoke_test else cfg["eval_protocol"].get("bootstrap_samples", 1000))

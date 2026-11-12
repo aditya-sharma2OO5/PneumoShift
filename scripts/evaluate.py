@@ -1,8 +1,13 @@
-"""In-domain and cross-dataset evaluation, calibration, and literature benchmark comparison."""
+"""In-domain and cross-dataset evaluation, calibration, and literature benchmark comparison.
+
+Exports raw prediction arrays (.npz) as the single source of truth for figures and tables,
+and computes optimal operating thresholds (tau) strictly on the source validation set.
+"""
 
 import argparse
 import csv
 from pathlib import Path
+import shutil
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
@@ -17,6 +22,7 @@ from pneumoshift.evaluation.benchmarks import compare_against_benchmarks
 from pneumoshift.evaluation.bootstrap import patient_bootstrap_ci
 from pneumoshift.evaluation.calibration import compute_ece
 from pneumoshift.evaluation.metrics import compute_discrimination_metrics
+from pneumoshift.evaluation.thresholds import compute_optimal_thresholds
 from pneumoshift.models.factory import build_model
 from pneumoshift.utils.io import load_yaml_config, save_json
 from pneumoshift.utils.logging import get_logger
@@ -75,17 +81,40 @@ def evaluate_split(
     n_resamples: int = 1000,
     seed: int = 42,
     uncertainty_mode: str = "uncertain_as_negative",
+    save_predictions_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Computes comprehensive evaluation metrics including bootstrap CIs."""
-    _, probs, targets, _ = extract_features_and_predictions(model, loader, device)
+    """Computes comprehensive evaluation metrics including bootstrap CIs and saves raw prediction arrays."""
+    logits, probs, targets, features = extract_features_and_predictions(model, loader, device)
 
     patient_ids = df["patient_id"].to_numpy() if "patient_id" in df.columns else np.arange(len(df))
+
+    # Save compressed raw arrays for 100% reproducible downstream figure generation
+    if save_predictions_path is not None:
+        save_path = Path(save_predictions_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(
+            save_path,
+            y_true=targets,
+            y_score=probs,
+            y_logits=logits,
+            patient_ids=patient_ids,
+            label_cols=np.array(label_cols),
+            features=features,
+        )
+        logger.info("Saved raw prediction arrays (.npz) to %s (samples: %d)", save_path, len(df))
 
     results: Dict[str, Any] = {
         "num_samples": len(df),
         "num_patients": int(len(np.unique(patient_ids))),
         "uncertainty_mode": uncertainty_mode,
         "per_class": {},
+        "_raw": {
+            "y_true": targets,
+            "y_score": probs,
+            "y_logits": logits,
+            "patient_ids": patient_ids,
+            "features": features,
+        },
     }
 
     aurocs: List[float] = []
@@ -166,8 +195,11 @@ def main() -> None:
     parser.add_argument("--config", default="configs/train/nih_densenet121.yaml", help="Path to experiment config YAML")
     parser.add_argument("--checkpoint", default=None, help="Path to model checkpoint (.pt). Defaults to best checkpoint.")
     parser.add_argument("--split", default="test", choices=["train", "val", "test", "target_cal", "official_val"], help="Dataset split to evaluate")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed override")
     parser.add_argument("--smoke_test", action="store_true", help="Run in synthetic dry-run smoke test mode")
     parser.add_argument("--output_dir", default=None, help="Directory to save evaluation tables and reports")
+    parser.add_argument("--predictions_dir", default="results/predictions", help="Directory to save prediction npz arrays")
+    parser.add_argument("--no_save_predictions", action="store_true", help="Disable saving raw prediction npz arrays")
     parser.add_argument("--benchmark", default=None, help="Literature benchmark override (e.g. pan_2019_nih, irvin_2019_chexpert, arasteh_2023_chexpert)")
     parser.add_argument("--uncertainty_mode", default=None, choices=["uncertain_as_negative", "uncertain_excluded"], help="Uncertainty evaluation policy (default from config or uncertain_as_negative)")
     parser.add_argument("--no_bootstrap", action="store_true", help="Disable computation of bootstrap confidence intervals")
@@ -175,6 +207,7 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_yaml_config("configs/smoke_test.yaml" if args.smoke_test else args.config)
+    seed = args.seed if args.seed is not None else cfg.get("seed", 42)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     arch = cfg.get("model", {}).get("architecture", "densenet121")
     img_size = cfg.get("data", {}).get("image_size", 224)
@@ -183,15 +216,17 @@ def main() -> None:
     num_classes = 1 if headline_only else len(label_cols)
     ds_name = cfg.get("data", {}).get("dataset_name", "nih")
 
-    # Output directory
+    # Output directory & prediction repository
     out_dir = Path(args.output_dir or cfg.get("eval", {}).get("output_dir", f"results/tables/{ds_name}_{arch}"))
     out_dir.mkdir(parents=True, exist_ok=True)
+    pred_dir = Path(args.predictions_dir)
+    pred_dir.mkdir(parents=True, exist_ok=True)
 
     # Locate dataset split CSV
     if args.smoke_test or ds_name == "synthetic":
         synth_dir = Path("data/synthetic")
         if not (synth_dir / "splits" / f"synthetic_{args.split}.csv").is_file():
-            create_synthetic_dataset(output_dir=synth_dir, num_samples=40, image_size=img_size)
+            create_synthetic_dataset(output_dir=synth_dir, num_samples=40, image_size=img_size, seed=seed)
         split_csv = synth_dir / "splits" / f"synthetic_{args.split}.csv"
         img_dir = synth_dir / "images"
     else:
@@ -200,13 +235,13 @@ def main() -> None:
         if not split_csv.is_file():
             logger.warning("Split file %s not found. Falling back to synthetic smoke data.", split_csv)
             synth_dir = Path("data/synthetic")
-            create_synthetic_dataset(output_dir=synth_dir, num_samples=40, image_size=img_size)
+            create_synthetic_dataset(output_dir=synth_dir, num_samples=40, image_size=img_size, seed=seed)
             split_csv = synth_dir / "splits" / "synthetic_test.csv"
             img_dir = synth_dir / "images"
         else:
             img_dir = Path(cfg.get("data", {}).get("images_dir", cfg.get("data", {}).get("data_dir", "")))
 
-    logger.info("Evaluating split: %s (%s)", args.split, split_csv)
+    logger.info("Evaluating split: %s (%s) | arch=%s | seed=%d", args.split, split_csv, arch, seed)
     df = pd.read_csv(split_csv)
     transform = get_transforms(split="test", image_size=img_size)
     dataset = ChestXrayDataset(df, images_dir=img_dir, transform=transform, headline_only=headline_only)
@@ -252,6 +287,12 @@ def main() -> None:
 
     for mode in modes_to_eval:
         logger.info("Executing evaluation under uncertainty mode: %s", mode)
+        pred_save_path = (
+            pred_dir / f"predictions_{args.split}_{arch}_{seed}.npz"
+            if not args.no_save_predictions
+            else None
+        )
+
         results = evaluate_split(
             model=model,
             loader=loader,
@@ -260,15 +301,56 @@ def main() -> None:
             device=device,
             compute_bootstrap=not args.no_bootstrap and not args.smoke_test,
             n_resamples=args.n_resamples,
-            seed=cfg.get("seed", 42),
+            seed=seed,
             uncertainty_mode=mode,
+            save_predictions_path=pred_save_path,
         )
+
+        # Mirror prediction array to out_dir
+        if pred_save_path and pred_save_path.is_file():
+            mirror_path = out_dir / f"predictions_{args.split}_{arch}_{seed}.npz"
+            if mirror_path != pred_save_path:
+                shutil.copy2(pred_save_path, mirror_path)
 
         mode_suffix = f"_{mode}" if len(modes_to_eval) > 1 else ""
 
+        # Extract raw predictions to compute source-val optimal threshold tau if on validation set
+        if args.split in ("val", "source_val") and "_raw" in results:
+            raw_t = results["_raw"]["y_true"]
+            raw_p = results["_raw"]["y_score"]
+            pneu_idx = label_cols.index("Pneumonia") if "Pneumonia" in label_cols else 0
+            yt = get_evaluation_targets(raw_t[:, pneu_idx], mode=mode)
+            yp = raw_p[:, pneu_idx]
+            opt_thresh = compute_optimal_thresholds(yt, yp)
+
+            tau_record = {
+                "architecture": arch,
+                "seed": seed,
+                "dataset": ds_name,
+                "selection_split": args.split,
+                "uncertainty_mode": mode,
+                "headline_class": "Pneumonia",
+                "source_val_optimal_tau": float(opt_thresh["youden_threshold"]),
+                "youden_tau": float(opt_thresh["youden_threshold"]),
+                "youden_metrics": opt_thresh["youden"]["metrics"],
+                "max_f1_tau": float(opt_thresh["f1_threshold"]),
+                "max_f1_metrics": opt_thresh["max_f1"]["metrics"],
+                "sens90_tau": float(opt_thresh["sens90_threshold"]),
+                "sens90_metrics": opt_thresh["fixed_sensitivity"]["metrics"],
+                "description": "Operating decision threshold selected strictly on source-validation set (zero target leakage)",
+            }
+            tau_path = pred_dir / f"tau_selection_{arch}_{seed}.json"
+            save_json(tau_record, tau_path)
+            save_json(tau_record, out_dir / f"tau_selection_{arch}_{seed}.json")
+            logger.info("Selected source validation optimal threshold tau=%.3f (Youden) / %.3f (F1). Saved to %s",
+                        tau_record["youden_tau"], tau_record["max_f1_tau"], tau_path)
+
+        # Remove _raw from results before serializing to JSON to avoid non-serializable ndarrays
+        results_to_save = {k: v for k, v in results.items() if k != "_raw"}
+
         # Save detailed JSON metrics
         json_path = out_dir / f"eval_metrics_{args.split}{mode_suffix}.json"
-        save_json(results, json_path)
+        save_json(results_to_save, json_path)
         logger.info("Saved evaluation JSON to %s", json_path)
 
         # Save summary CSV table
@@ -276,7 +358,7 @@ def main() -> None:
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(["finding", "auroc", "auroc_ci_lower", "auroc_ci_upper", "auprc", "auprc_ci_lower", "auprc_ci_upper", "sens_at_90_spec", "spec_at_90_sens", "prevalence", "ece"])
-            for col, m in results["per_class"].items():
+            for col, m in results_to_save["per_class"].items():
                 auc_ci = m.get("auroc_ci_95", ["", ""])
                 prc_ci = m.get("auprc_ci_95", ["", ""])
                 writer.writerow([
@@ -297,7 +379,7 @@ def main() -> None:
         # Literature benchmark comparison
         try:
             bench_comp = compare_against_benchmarks(
-                evaluated_metrics=results["summary_flat"],
+                evaluated_metrics=results_to_save["summary_flat"],
                 benchmark_name=bench_name,
                 headline_class=HEADLINE_CLASS,
             )
