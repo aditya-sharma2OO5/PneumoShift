@@ -223,6 +223,8 @@ __marimo__/
 /data/
 /results/runs/
 /results/figures/
+/results/predictions/*
+!/results/predictions/.gitkeep
 /results/tables/cross_domain/
 /results/tables/phase4_ablations/
 /results/tables/xai/
@@ -253,6 +255,8 @@ credentials.*
 *.ckpt
 *.h5
 *.onnx
+*.npz
+*.npy
 *.zip
 *.tar
 *.tar.gz
