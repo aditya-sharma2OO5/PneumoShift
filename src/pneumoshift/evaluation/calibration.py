@@ -124,8 +124,8 @@ class TemperatureScaling:
 
     def _fit_scalar(self, z: np.ndarray, y: np.ndarray) -> float:
         valid = (y == 0.0) | (y == 1.0)
-        z_v = z[valid]
-        y_v = y[valid]
+        z_v = z[valid].astype(np.float64)
+        y_v = y[valid].astype(np.float64)
 
         if len(y_v) == 0 or len(np.unique(y_v)) < 2:
             return 1.0
@@ -137,7 +137,13 @@ class TemperatureScaling:
             loss = np.maximum(scaled_z, 0.0) - scaled_z * y_v + np.log1p(np.exp(-np.abs(scaled_z)))
             return float(np.mean(loss))
 
-        res = scipy.optimize.minimize(nll_loss, x0=np.array([1.0]), bounds=[(0.05, 5.0)], method="L-BFGS-B")
+        res = scipy.optimize.minimize(
+            nll_loss,
+            x0=np.array([1.0], dtype=np.float64),
+            bounds=[(0.05, 5.0)],
+            method="L-BFGS-B",
+            options={"eps": 1e-4},
+        )
         return float(res.x[0])
 
     def fit(self, logits: np.ndarray, labels: np.ndarray) -> "TemperatureScaling":
