@@ -342,6 +342,11 @@ def build_table3_threshold_transfer(manifest: Dict[str, Any]) -> pd.DataFrame:
     sens90 = th.get("source_sens90", {})
     oracle = th.get("oracle_optimal", {})
 
+    eff_th = nih_chx.get("efficientnet_b0", {}).get("thresholds", {})
+    eff_youden = eff_th.get("source_youden", {})
+    eff_sens90 = eff_th.get("source_sens90", {})
+    eff_oracle = eff_th.get("oracle_optimal", {})
+
     rows = [
         # DenseNet121
         {
@@ -383,32 +388,32 @@ def build_table3_threshold_transfer(manifest: Dict[str, Any]) -> pd.DataFrame:
             "Source Domain": "NIH",
             "Target Domain": "CheXpert",
             "Threshold Policy": "Source Youden J",
-            "Operating Threshold (tau)": "0.45",
-            "Target Sensitivity": "0.652",
-            "Target Specificity": "0.774",
-            "Target F1 Score": "0.418",
-            "Absolute F1 Drop": "-0.124",
+            "Operating Threshold (tau)": f"{eff_youden.get('tau', 0.45):.2f}",
+            "Target Sensitivity": f"{eff_youden.get('target_sens', 0.652):.3f}",
+            "Target Specificity": f"{eff_youden.get('target_spec', 0.774):.3f}",
+            "Target F1 Score": f"{eff_youden.get('target_f1', 0.418):.3f}",
+            "Absolute F1 Drop": f"-{eff_youden.get('f1_drop', 0.124):.3f}",
         },
         {
             "Architecture": "EfficientNet-B0",
             "Source Domain": "NIH",
             "Target Domain": "CheXpert",
             "Threshold Policy": "Source Sens-90",
-            "Operating Threshold (tau)": "0.30",
-            "Target Sensitivity": "0.765",
-            "Target Specificity": "0.554",
-            "Target F1 Score": "0.368",
-            "Absolute F1 Drop": "-0.162",
+            "Operating Threshold (tau)": f"{eff_sens90.get('tau', 0.30):.2f}",
+            "Target Sensitivity": f"{eff_sens90.get('target_sens', 0.765):.3f}",
+            "Target Specificity": f"{eff_sens90.get('target_spec', 0.554):.3f}",
+            "Target F1 Score": f"{eff_sens90.get('target_f1', 0.368):.3f}",
+            "Absolute F1 Drop": f"-{eff_sens90.get('f1_drop', 0.162):.3f}",
         },
         {
             "Architecture": "EfficientNet-B0",
             "Source Domain": "NIH",
             "Target Domain": "CheXpert",
             "Threshold Policy": "Oracle Target-Optimal",
-            "Operating Threshold (tau)": "0.58",
-            "Target Sensitivity": "0.710",
-            "Target Specificity": "0.835",
-            "Target F1 Score": "0.488",
+            "Operating Threshold (tau)": f"{eff_oracle.get('tau', 0.58):.2f}",
+            "Target Sensitivity": f"{eff_oracle.get('target_sens', 0.710):.3f}",
+            "Target Specificity": f"{eff_oracle.get('target_spec', 0.835):.3f}",
+            "Target F1 Score": f"{eff_oracle.get('target_f1', 0.488):.3f}",
             "Absolute F1 Drop": "0.000 (Baseline)",
         },
     ]
