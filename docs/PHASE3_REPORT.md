@@ -95,15 +95,18 @@ Experiments strictly follow the protocol specified in `configs/eval/nih_to_chexp
 
 ### 3.1 Literature Benchmark Comparison
 
+> [!NOTE]
+> **Benchmark Comparability Note**: Test splits are not identical to Pan et al. (2019) or Tayebi Arasteh et al. (2023), who utilized disparate custom institutional subsets. Literature values are presented as reference bounds for expected domain degradation rather than direct head-to-head evaluation on identical images.
+
 | Shift Experiment | Finding | Source In-Domain AUROC | Cross-Domain Target AUROC | Observed Gap ($\Delta_{\text{AUROC}}$) [95% CI] | Literature Reference Gap | Alignment Status |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| **NIH $\rightarrow$ CheXpert** | **Pneumonia** | **0.742** | **0.635** | **$-0.107$ [$-0.145, -0.069$]** | **$-0.082 \text{ to } -0.122$** (Arasteh et al.) | **Aligned** |
-| **NIH $\rightarrow$ CheXpert** | Pleural Effusion | 0.875 | 0.812 | $-0.063$ [$-0.089, -0.037$] | $-0.058 \text{ to } -0.075$ (Pan et al.) | **Aligned** |
-| **NIH $\rightarrow$ CheXpert** | Atelectasis | 0.810 | 0.698 | $-0.112$ [$-0.138, -0.086$] | $-0.100 \text{ to } -0.125$ (Arasteh et al.) | **Aligned** |
-| **NIH $\rightarrow$ CheXpert** | Cardiomegaly | 0.880 | 0.815 | $-0.065$ [$-0.091, -0.039$] | $-0.055 \text{ to } -0.080$ (Irvin et al.) | **Aligned** |
-| **NIH $\rightarrow$ CheXpert** | **Macro Average** | **0.822** | **0.738** | **$-0.084$ [$-0.104, -0.064$]** | **$-0.070 \text{ to } -0.095$** (Literature) | **Aligned** |
-| **CheXpert $\rightarrow$ NIH** | **Pneumonia** | **0.765** | **0.647** | **$-0.118$ [$-0.154, -0.082$]** | **$-0.095 \text{ to } -0.125$** (Arasteh et al.) | **Aligned** |
-| **CheXpert $\rightarrow$ NIH** | **Macro Average** | **0.814** | **0.722** | **$-0.092$ [$-0.115, -0.069$]** | **$-0.080 \text{ to } -0.105$** (Literature) | **Aligned** |
+| **NIH $\rightarrow$ CheXpert** | **Pneumonia** | **0.742** | **0.635** | **$-0.107$ [$-0.145, -0.069$]** | **$-0.082 \text{ to } -0.122$** (Arasteh et al.) | **Comparable (different splits)** |
+| **NIH $\rightarrow$ CheXpert** | Pleural Effusion | 0.875 | 0.812 | $-0.063$ [$-0.089, -0.037$] | $-0.058 \text{ to } -0.075$ (Pan et al.) | **Comparable (different splits)** |
+| **NIH $\rightarrow$ CheXpert** | Atelectasis | 0.810 | 0.698 | $-0.112$ [$-0.138, -0.086$] | $-0.100 \text{ to } -0.125$ (Arasteh et al.) | **Comparable (different splits)** |
+| **NIH $\rightarrow$ CheXpert** | Cardiomegaly | 0.880 | 0.815 | $-0.065$ [$-0.091, -0.039$] | $-0.055 \text{ to } -0.080$ (Irvin et al.) | **Comparable (different splits)** |
+| **NIH $\rightarrow$ CheXpert** | **Macro Average** | **0.822** | **0.738** | **$-0.084$ [$-0.104, -0.064$]** | **$-0.070 \text{ to } -0.095$** (Literature) | **Comparable (different splits)** |
+| **CheXpert $\rightarrow$ NIH** | **Pneumonia** | **0.765** | **0.647** | **$-0.118$ [$-0.154, -0.082$]** | **$-0.095 \text{ to } -0.125$** (Arasteh et al.) | **Comparable (different splits)** |
+| **CheXpert $\rightarrow$ NIH** | **Macro Average** | **0.814** | **0.722** | **$-0.092$ [$-0.115, -0.069$]** | **$-0.080 \text{ to } -0.105$** (Literature) | **Comparable (different splits)** |
 
 *All observed performance gaps achieve statistical significance ($p < 0.001$, Benjamini-Hochberg FDR corrected at $\alpha = 0.05$).*
 
@@ -153,7 +156,10 @@ In clinical practice, models output continuous risk scores that must be binarize
 | **Macro Average** | **Youden $J$** | — | — | — | **$-0.112$** | — | — | **$-0.018$** | — | — | **0.068** |
 | **Macro Average** | **Sens@90%** | — | — | — | **$-0.154$** | — | — | **$-0.025$** | — | — | **0.079** |
 
-### 5.2 Continuous Score Distribution Shifts (Pan et al. 2019 Table 4 Mirror)
+### 5.2 Continuous Score Distribution Shifts (Pan et al. 2019 Table 4 Analytical Protocol)
+
+> [!NOTE]
+> **Analytical Mirroring Note**: This analysis mirrors the two-sample distributional shift methodology introduced by Pan et al. (2019) Table 4. Evaluated cohorts are strictly patient-partitioned and differ from the custom splits in Pan et al. (2019); results are presented as indicative validation of continuous probability degradation under cross-institutional shift.
 
 Two-sample Kolmogorov-Smirnov (KS) tests confirm that the distribution of continuous predicted probabilities shifts systematically downwards on the target domain:
 

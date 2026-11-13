@@ -78,6 +78,9 @@ All experiments follow the unified configuration protocol defined in `configs/tr
 
 ### 3.1 Published Benchmark Reference Targets
 
+> [!NOTE]
+> **Partitioning Methodology Clarification**: Pan et al. (2019) utilized a custom random split of the NIH ChestX-ray14 dataset. In contrast, this study adheres strictly to the official NIH patient-partitioned test split (`test_list.txt`, $N = 25,596$ images from independent patients) to guarantee verifiable zero patient leakage. Consequently, published literature metrics serve as an architectural reference rather than a direct comparison on identical patient subsets.
+
 | Pathology Finding | Pan et al. (2019) NIH DenseNet | Irvin et al. (2019) CheXpert Official Val | Tayebi Arasteh et al. (2023) NIH Test | Tayebi Arasteh et al. (2023) CheXpert Test |
 | :--- | :---: | :---: | :---: | :---: |
 | **Atelectasis** | 0.833 | 0.811 | 0.747 ± 0.004 | 0.684 ± 0.004 |
@@ -95,7 +98,7 @@ Evaluated on official held-out test splits with patient-clustered 1000-resample 
 
 | Model & Cohort | Pneumonia AUROC [95% CI] | Pneumonia AUPRC [95% CI] | Macro AUROC | Macro AUPRC | ECE (15 bins) | Literature Target | Status |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **NIH DenseNet121** | 0.732 [0.718, 0.746] | 0.384 [0.352, 0.416] | 0.822 | 0.495 | 0.043 | 0.734 (Pan et al.) | **Aligned** ($\Delta = -0.002$) |
+| **NIH DenseNet121** | 0.732 [0.718, 0.746] | 0.384 [0.352, 0.416] | 0.822 | 0.495 | 0.043 | 0.734 (Pan et al.) | **Comparable (different splits)** ($\Delta = -0.002$) |
 | **CheXpert DenseNet121** | 0.765 [0.751, 0.779] | 0.428 [0.395, 0.461] | 0.814 | 0.518 | 0.038 | 0.764 (Arasteh et al.) | **Aligned** ($\Delta = +0.001$) |
 | **CheXpert Official Val (5-class)** | — | — | 0.887 | 0.612 | 0.032 | 0.889 (Irvin et al.) | **Aligned** ($\Delta = -0.002$) |
 
