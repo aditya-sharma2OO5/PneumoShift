@@ -8,9 +8,9 @@ import numpy as np
 import pytest
 
 from pneumoshift.figures.plotters import (
-    _synthetic_pr_curve,
-    _synthetic_roc_curve,
     apply_publication_theme,
+    compute_empirical_pr_curve,
+    compute_empirical_roc_curve,
     export_figure,
     generate_all_figures,
     plot_fig1_study_overview,
@@ -29,17 +29,22 @@ def test_apply_publication_theme():
     assert plt.rcParams["pdf.fonttype"] == 42
 
 
-def test_synthetic_curve_helpers():
-    fpr, tpr = _synthetic_roc_curve(target_auc=0.75, n_points=50)
-    assert len(fpr) == 50
-    assert len(tpr) == 50
-    assert np.all(np.diff(fpr) >= 0), "FPR must be monotonically non-decreasing"
-    assert np.all(np.diff(tpr) >= 0), "TPR must be monotonically non-decreasing"
+def test_empirical_curve_helpers():
+    y_true = np.array([0, 0, 0, 0, 1, 1, 0, 1, 0, 0] * 5)
+    y_score = np.array([0.1, 0.2, 0.15, 0.3, 0.8, 0.7, 0.25, 0.9, 0.05, 0.4] * 5)
 
-    rec, prec = _synthetic_pr_curve(target_auprc=0.35, n_points=50)
-    assert len(rec) == 50
-    assert len(prec) == 50
-    assert np.all(prec >= 0.0) and np.all(prec <= 1.0)
+    roc_res = compute_empirical_roc_curve(y_true, y_score, n_bootstrap=10)
+    assert "fpr" in roc_res and "tpr" in roc_res
+    assert "op_fpr" in roc_res and "op_tpr" in roc_res
+    assert 0.0 <= roc_res["auroc"] <= 1.0
+    # Operating point must match an exact point on the empirical curve
+    matches = np.isclose(roc_res["fpr"], roc_res["op_fpr"]) & np.isclose(roc_res["tpr"], roc_res["op_tpr"])
+    assert np.any(matches), "Youden operating point must lie strictly on the empirical ROC curve"
+
+    pr_res = compute_empirical_pr_curve(y_true, y_score, n_bootstrap=10)
+    assert "precision" in pr_res and "recall" in pr_res
+    assert 0.0 <= pr_res["auprc"] <= 1.0
+    assert np.isclose(pr_res["prevalence"], np.mean(y_true))
 
 
 def test_plot_fig1_study_overview():
