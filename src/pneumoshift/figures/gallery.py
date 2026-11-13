@@ -577,23 +577,23 @@ def build_gallery_html(
       <div class="kpi-grid">
         <div class="kpi-card kpi-blue">
           <div class="kpi-title">Discrimination Gap</div>
-          <div class="kpi-value">&minus;0.107 AUROC</div>
-          <div class="kpi-desc">Statistically significant drop (p &lt; 0.001, FDR q = 0.0003) across all architectures</div>
+          <div class="kpi-value">&minus;0.014 AUROC</div>
+          <div class="kpi-desc">In-Domain 0.675 &rarr; CheXpert Transfer 0.661 (p &lt; 0.001) across 3 seeds</div>
         </div>
         <div class="kpi-card kpi-orange">
           <div class="kpi-title">Calibration Escalation</div>
-          <div class="kpi-value">+228.6% ECE</div>
-          <div class="kpi-desc">ECE surged from 0.042 to 0.138; 10% target holdout recovers 48.2%</div>
+          <div class="kpi-value">55.5% &ndash; 60.5%</div>
+          <div class="kpi-desc">Target holdout recalibration recovers over half of cross-domain calibration error</div>
         </div>
         <div class="kpi-card kpi-red">
           <div class="kpi-title">Threshold Discordance</div>
-          <div class="kpi-value">&minus;0.154 F1 Collapse</div>
-          <div class="kpi-desc">Source Youden J transfer collapsed F1 (0.548 &rarr; 0.394) causing alarm fatigue</div>
+          <div class="kpi-value">&minus;0.010 to &minus;0.041</div>
+          <div class="kpi-desc">Deploying unadjusted source thresholds reduces F1 across all cohorts (&Delta;F1 &le; 0)</div>
         </div>
         <div class="kpi-card kpi-purple">
           <div class="kpi-title">Architecture Bias</div>
-          <div class="kpi-value">0.074 vs 0.107</div>
-          <div class="kpi-desc">EfficientNet-B0 exhibited narrower gap (p = 0.0039); U-Ones dropped spec by 26.4%</div>
+          <div class="kpi-value">0.700 vs 0.661</div>
+          <div class="kpi-desc">EfficientNet-B0 achieves higher transferred AUROC on CheXpert than DenseNet-121</div>
         </div>
         <div class="kpi-card kpi-green">
           <div class="kpi-title">Shortcut Energy Surge</div>
