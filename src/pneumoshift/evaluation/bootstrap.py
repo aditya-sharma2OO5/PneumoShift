@@ -86,10 +86,12 @@ def paired_bootstrap_auroc_diff(
     ci_lower = float(np.percentile(diffs, 2.5)) if diffs else orig_diff
     ci_upper = float(np.percentile(diffs, 97.5)) if diffs else orig_diff
 
-    # Two-sided empirical p-value for hypothesis diff == 0
+    # Two-sided empirical p-value with Davison & Hinkley (1997) finite-sample correction
     if diffs:
-        p_val = float(2.0 * min(np.mean(np.array(diffs) <= 0), np.mean(np.array(diffs) >= 0)))
-        p_val = min(p_val, 1.0)
+        r_le = np.sum(np.array(diffs) <= 0)
+        r_ge = np.sum(np.array(diffs) >= 0)
+        p_val = float(2.0 * (min(r_le, r_ge) + 1) / (len(diffs) + 1))
+        p_val = min(max(p_val, 1.0 / (len(diffs) + 1)), 1.0)
     else:
         p_val = 1.0
 
@@ -167,9 +169,11 @@ def two_sample_bootstrap_diff(
     ci_lower = float(np.percentile(diffs, 100 * (alpha / 2.0)))
     ci_upper = float(np.percentile(diffs, 100 * (1.0 - alpha / 2.0)))
 
-    # Two-sided empirical p-value for H0: diff == 0
-    p_val = float(2.0 * min(np.mean(np.array(diffs) <= 0), np.mean(np.array(diffs) >= 0)))
-    p_val = min(p_val, 1.0)
+    # Two-sided empirical p-value with Davison & Hinkley (1997) finite-sample correction
+    r_le = np.sum(np.array(diffs) <= 0)
+    r_ge = np.sum(np.array(diffs) >= 0)
+    p_val = float(2.0 * (min(r_le, r_ge) + 1) / (len(diffs) + 1))
+    p_val = min(max(p_val, 1.0 / (len(diffs) + 1)), 1.0)
 
     return {
         "mean_diff": orig_diff,
