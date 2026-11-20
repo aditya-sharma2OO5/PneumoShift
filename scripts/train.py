@@ -129,6 +129,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--architecture", default=None, help="Model architecture override")
     parser.add_argument("--epochs", type=int, default=None, help="Training epochs override")
     parser.add_argument("--eval_test", action="store_true", help="Evaluate best checkpoint on test set after training")
+    parser.add_argument("--run_id", type=str, default="repro_v1", help="Unique identifier for run/experiment (default: repro_v1)")
+    parser.add_argument("--smoke_dir", type=str, default="outputs/smoke", help="Directory to isolate smoke test outputs")
+    parser.add_argument("--output_dir", type=str, default=None, help="Directory to save raw prediction arrays (.npz)")
+    parser.add_argument("--allow_overwrite", action="store_true", help="Permit overwriting existing prediction arrays")
     return parser.parse_args()
 
 
@@ -144,6 +148,7 @@ def write_run_manifest(
     end_time_iso: str,
     best_epoch: int,
     best_val_pneumonia_auroc: float,
+    run_id: str = "repro_v1",
 ) -> None:
     """Writes a standardized forensic run manifest documenting exact environment and dataset hashes."""
     try:
@@ -173,7 +178,7 @@ def write_run_manifest(
             ckpt_hashes[name] = compute_file_sha256(ckpt_p)
 
     manifest = {
-        "run_id": f"{arch}_seed_{seed}_{start_time_iso.replace(':', '-')}",
+        "run_id": f"{run_id}_{arch}_seed_{seed}_{start_time_iso.replace(':', '-')}",
         "architecture": arch,
         "seed": seed,
         "epochs": epochs,
@@ -181,6 +186,11 @@ def write_run_manifest(
         "end_time": end_time_iso,
         "best_epoch": best_epoch,
         "best_val_pneumonia_auroc": best_val_pneumonia_auroc,
+        "rng_seeding_protocol": (
+            "Full multi-process reseeding enabled via worker_init_fn and torch.Generator. "
+            "RNG streams differ from legacy unseeded DataLoader runs (pre-cb8f978 / unseeded worker loops), "
+            "guaranteeing strict worker-level determinism."
+        ),
         "git_commit": git_commit,
         "gpu_name": gpu_name,
         "cuda_version": cuda_version,
@@ -230,10 +240,20 @@ def main() -> None:
     splits_dir = Path(cfg.get("data", {}).get("splits_dir", "data/splits"))
     synth_dir = Path("data/synthetic")
 
-    base_run_out_dir = Path(cfg.get("train", {}).get("run_output_dir", "results/runs"))
-    base_checkpoint_dir = Path(cfg.get("train", {}).get("checkpoint_dir", "results/runs/checkpoints"))
+    run_id = args.run_id
+    if args.smoke_test:
+        base_run_out_dir = Path(args.smoke_dir) / "runs" / run_id / arch
+        base_checkpoint_dir = Path(args.smoke_dir) / "checkpoints" / run_id / arch
+        pred_dir = Path(args.smoke_dir) / "predictions" / run_id
+        logger.info("SMOKE TEST MODE ENABLED: Routing outputs strictly to '%s' (zero impact on results/predictions)", args.smoke_dir)
+    else:
+        base_run_out_dir = Path(cfg.get("train", {}).get("run_output_dir", "results/runs"))
+        base_checkpoint_dir = Path(cfg.get("train", {}).get("checkpoint_dir", "results/runs/checkpoints"))
+        pred_dir = Path(args.output_dir or "results/predictions")
+
     base_run_out_dir.mkdir(parents=True, exist_ok=True)
     base_checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    pred_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Initializing reproducible training suite:")
     logger.info("  Architecture: %s | Epochs: %d | Headline Only: %s", arch, epochs, headline_only)
@@ -483,9 +503,6 @@ def main() -> None:
                 model.load_state_dict(ckpt["model_state_dict"])
                 logger.info("Loaded best model checkpoint from %s (best epoch %s)", best_ckpt_path, ckpt.get("epoch", "?"))
 
-            pred_dir = Path("results/predictions")
-            pred_dir.mkdir(parents=True, exist_ok=True)
-
             # 1. Extract and save Source Validation predictions & select tau strictly on source val
             logger.info("Extracting raw prediction arrays on source validation split (seed=%d)...", seed)
             v_logits, v_probs, v_targets, v_feats, v_patients, v_image_ids = extract_batch_predictions(
@@ -493,6 +510,13 @@ def main() -> None:
             )
             pneu_idx = label_cols.index("Pneumonia") if "Pneumonia" in label_cols else 5
             val_pred_path = pred_dir / f"predictions_val_{arch}_{seed}.npz"
+            if val_pred_path.is_file() and not args.smoke_test and not args.allow_overwrite and not args.resume:
+                raise RuntimeError(
+                    f"Prediction file '{val_pred_path}' already exists! Refusing to overwrite existing empirical results. "
+                    "Pass --allow_overwrite to explicitly permit overwriting, or specify a distinct --run_id / --output_dir."
+                )
+
+            val_row_order_hash = hashlib.sha256("".join(v_image_ids.astype(str)).encode("utf-8")).hexdigest()
             np.savez_compressed(
                 val_pred_path,
                 y_true=v_targets,
@@ -502,10 +526,11 @@ def main() -> None:
                 patient_ids=v_patients,
                 pneumonia_col_idx=np.int64(pneu_idx),
                 label_cols=np.array(label_cols),
+                split_csv_row_order_hash=val_row_order_hash,
                 features=v_feats,
             )
             shutil.copy2(val_pred_path, seed_run_dir / f"predictions_val_{arch}_{seed}.npz")
-            logger.info("Saved source validation prediction arrays (.npz) to %s", val_pred_path)
+            logger.info("Saved source validation prediction arrays (.npz) to %s (row_order_hash: %s)", val_pred_path, val_row_order_hash[:10])
 
             raw_yt = v_targets[:, pneu_idx]
             yt = np.where(raw_yt == -1.0, 0.0, raw_yt)
@@ -556,6 +581,13 @@ def main() -> None:
                     model, test_loader, trainer.device, test_df
                 )
                 test_pred_path = pred_dir / f"predictions_test_{arch}_{seed}.npz"
+                if test_pred_path.is_file() and not args.smoke_test and not args.allow_overwrite and not args.resume:
+                    raise RuntimeError(
+                        f"Prediction file '{test_pred_path}' already exists! Refusing to overwrite existing empirical results. "
+                        "Pass --allow_overwrite to explicitly permit overwriting, or specify a distinct --run_id / --output_dir."
+                    )
+
+                test_row_order_hash = hashlib.sha256("".join(t_image_ids.astype(str)).encode("utf-8")).hexdigest()
                 np.savez_compressed(
                     test_pred_path,
                     y_true=t_targets,
@@ -565,10 +597,11 @@ def main() -> None:
                     patient_ids=t_patients,
                     pneumonia_col_idx=np.int64(pneu_idx),
                     label_cols=np.array(label_cols),
+                    split_csv_row_order_hash=test_row_order_hash,
                     features=t_feats,
                 )
                 shutil.copy2(test_pred_path, seed_run_dir / f"predictions_test_{arch}_{seed}.npz")
-                logger.info("Saved source test prediction arrays (.npz) to %s", test_pred_path)
+                logger.info("Saved source test prediction arrays (.npz) to %s (row_order_hash: %s)", test_pred_path, test_row_order_hash[:10])
 
                 eval_modes = seed_cfg.get("eval", {}).get("eval_uncertainty_modes", ["uncertain_excluded"])
                 if not isinstance(eval_modes, list):
@@ -630,6 +663,7 @@ def main() -> None:
             end_time_iso=end_time_iso,
             best_epoch=trainer.best_epoch,
             best_val_pneumonia_auroc=float(trainer.checkpoint_cb.best_score),
+            run_id=run_id,
         )
         write_run_manifest(
             output_path=base_run_out_dir / f"run_manifest_{arch}_{seed}.json",
@@ -643,6 +677,7 @@ def main() -> None:
             end_time_iso=end_time_iso,
             best_epoch=trainer.best_epoch,
             best_val_pneumonia_auroc=float(trainer.checkpoint_cb.best_score),
+            run_id=run_id,
         )
 
     # Multi-seed aggregate summary if multiple seeds executed

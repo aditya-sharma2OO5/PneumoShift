@@ -12,6 +12,7 @@ Orchestrates the complete Phase 3 cross-dataset evaluation pipeline:
 
 import argparse
 import csv
+import hashlib
 from pathlib import Path
 import shutil
 from typing import Any, Dict, List, Optional, Tuple
@@ -118,6 +119,23 @@ def parse_args() -> argparse.Namespace:
         "--predictions_dir",
         default="results/predictions",
         help="Directory to save raw prediction arrays (.npz)",
+    )
+    parser.add_argument(
+        "--run_id",
+        type=str,
+        default="repro_v1",
+        help="Unique identifier for run/experiment (default: repro_v1)",
+    )
+    parser.add_argument(
+        "--smoke_dir",
+        type=str,
+        default="outputs/smoke",
+        help="Directory to isolate smoke test outputs from production results",
+    )
+    parser.add_argument(
+        "--allow_overwrite",
+        action="store_true",
+        help="Permit overwriting existing prediction arrays (.npz)",
     )
     return parser.parse_args()
 
@@ -556,11 +574,26 @@ def main() -> None:
     pneu_col_idx = np.int64(classes.index("Pneumonia") if "Pneumonia" in classes else 5)
 
     # Save raw prediction arrays (.npz) as the single source of truth for figures
-    pred_dir = Path(args.predictions_dir)
-    pred_dir.mkdir(parents=True, exist_ok=True)
     eval_seed = args.seed if args.seed is not None else cfg.get("seed", 42)
+    run_id = args.run_id
+    if args.smoke_test:
+        pred_dir = Path(args.smoke_dir) / "predictions" / run_id
+        out_dir = Path(args.smoke_dir) / "tables" / run_id
+        logger.info("SMOKE TEST MODE: Routing cross-domain outputs strictly to '%s' (zero impact on results/predictions)", args.smoke_dir)
+    else:
+        pred_dir = Path(args.predictions_dir)
+
+    pred_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     tgt_pred_path = pred_dir / f"predictions_cross_domain_{arch}_{eval_seed}.npz"
+    if tgt_pred_path.is_file() and not args.smoke_test and not args.allow_overwrite:
+        raise RuntimeError(
+            f"Prediction file '{tgt_pred_path}' already exists! Refusing to overwrite existing empirical results. "
+            "Pass --allow_overwrite to explicitly permit overwriting, or specify a distinct --predictions_dir / --run_id."
+        )
+
+    tgt_row_order_hash = hashlib.sha256("".join(tgt_image_ids.astype(str)).encode("utf-8")).hexdigest()
     np.savez_compressed(
         tgt_pred_path,
         y_true=tgt_targets,
@@ -570,15 +603,22 @@ def main() -> None:
         patient_ids=tgt_patients,
         pneumonia_col_idx=pneu_col_idx,
         label_cols=np.array(classes),
+        split_csv_row_order_hash=tgt_row_order_hash,
         features=tgt_feats,
     )
-    logger.info("Saved raw target cross-domain predictions (.npz) to %s (samples: %d)", tgt_pred_path, len(df_tgt_test))
+    logger.info("Saved raw target cross-domain predictions (.npz) to %s (samples: %d, row_order_hash: %s)", tgt_pred_path, len(df_tgt_test), tgt_row_order_hash[:10])
     mirror_tgt_path = out_dir / f"predictions_cross_domain_{arch}_{eval_seed}.npz"
     if mirror_tgt_path != tgt_pred_path:
         shutil.copy2(tgt_pred_path, mirror_tgt_path)
 
     if src_targets is not None:
         src_pred_path = pred_dir / f"predictions_source_val_{arch}_{eval_seed}.npz"
+        if src_pred_path.is_file() and not args.smoke_test and not args.allow_overwrite:
+            raise RuntimeError(
+                f"Prediction file '{src_pred_path}' already exists! Refusing to overwrite existing empirical results. "
+                "Pass --allow_overwrite to explicitly permit overwriting, or specify a distinct --predictions_dir / --run_id."
+            )
+        src_row_order_hash = hashlib.sha256("".join(src_image_ids.astype(str)).encode("utf-8")).hexdigest()
         np.savez_compressed(
             src_pred_path,
             y_true=src_targets,
@@ -588,9 +628,10 @@ def main() -> None:
             patient_ids=src_patients,
             pneumonia_col_idx=pneu_col_idx,
             label_cols=np.array(classes),
+            split_csv_row_order_hash=src_row_order_hash,
             features=src_feats,
         )
-        logger.info("Saved raw source validation predictions (.npz) to %s (samples: %d)", src_pred_path, len(df_src_val))
+        logger.info("Saved raw source validation predictions (.npz) to %s (samples: %d, row_order_hash: %s)", src_pred_path, len(df_src_val), src_row_order_hash[:10])
         mirror_src_path = out_dir / f"predictions_source_val_{arch}_{eval_seed}.npz"
         if mirror_src_path != src_pred_path:
             shutil.copy2(src_pred_path, mirror_src_path)
@@ -599,6 +640,12 @@ def main() -> None:
         cal_patients = df_tgt_cal["patient_id"].to_numpy() if "patient_id" in df_tgt_cal.columns else np.arange(len(df_tgt_cal))
         cal_image_ids = _extract_image_ids(df_tgt_cal)
         cal_pred_path = pred_dir / f"predictions_target_cal_{arch}_{eval_seed}.npz"
+        if cal_pred_path.is_file() and not args.smoke_test and not args.allow_overwrite:
+            raise RuntimeError(
+                f"Prediction file '{cal_pred_path}' already exists! Refusing to overwrite existing empirical results. "
+                "Pass --allow_overwrite to explicitly permit overwriting, or specify a distinct --predictions_dir / --run_id."
+            )
+        cal_row_order_hash = hashlib.sha256("".join(cal_image_ids.astype(str)).encode("utf-8")).hexdigest()
         np.savez_compressed(
             cal_pred_path,
             y_true=cal_targets,
@@ -608,8 +655,9 @@ def main() -> None:
             patient_ids=cal_patients,
             pneumonia_col_idx=pneu_col_idx,
             label_cols=np.array(classes),
+            split_csv_row_order_hash=cal_row_order_hash,
         )
-        logger.info("Saved raw target cal predictions (.npz) to %s", cal_pred_path)
+        logger.info("Saved raw target cal predictions (.npz) to %s (row_order_hash: %s)", cal_pred_path, cal_row_order_hash[:10])
 
     # Protocol parameters
     n_resamples = args.n_resamples or (25 if args.smoke_test else cfg["eval_protocol"].get("bootstrap_samples", 1000))
