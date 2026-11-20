@@ -233,6 +233,7 @@ __marimo__/
 /results/tables/audit_chexpert/
 /results/tables/*.json
 /results/*.json
+/outputs/
 
 # Security, Credentials & Key Protection
 kaggle.json
@@ -285,6 +286,5 @@ AUDIT_TRAINING.md
 INPUT_INVENTORY.md
 PIPELINE_CHECKS.md
 UPDATED_FINDINGS.md
-
-
+CHEXPERT_COHORT.md
 
