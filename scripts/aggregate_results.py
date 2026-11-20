@@ -176,7 +176,7 @@ def run_aggregation_pipeline(
         "| **Table 1** | Primary Cross-Domain Discrimination Benchmark | `table1_cross_domain_discrimination.{csv,json,md,tex}` |",
         "| **Table 2** | 4-Regime Probability Calibration & Oracle Recalibration | `table2_calibration_regimes_and_oracle_recovery.{csv,json,md,tex}` |",
         "| **Table 3** | Source-Optimal Decision Threshold Transfer Breakdown | `table3_decision_threshold_transfer.{csv,json,md,tex}` |",
-        "| **Table 4** | Architecture & CheXpert Uncertainty Policy Ablations | `table4_architecture_and_uncertainty_ablations.{csv,json,md,tex}` |",
+        "| **Table 4** | Architecture & CheXpert Uncertainty Policy Ablations (CheXpert -> NIH Transfer, Pneumonia AUROC) | `table4_architecture_and_uncertainty_ablations.{csv,json,md,tex}` |",
         "| **Table 5** | Explainability Saliency Audit, Faithfulness & Shortcut Quantification | `table5_explainability_and_shortcuts_audit.{csv,json,md,tex}` |",
         "| **Table 6** | Consolidated Hypothesis Testing & Significance Summary | `table6_hypothesis_testing_summary.{csv,json,md,tex}` |",
         "",

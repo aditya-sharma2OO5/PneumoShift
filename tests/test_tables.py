@@ -85,7 +85,11 @@ class TestTableBuilders:
         df = build_table4_architecture_and_uncertainty(sample_manifest)
         assert len(df) == 6
         assert "Uncertainty Policy" in df.columns
+        assert "CheXpert In-Domain AUROC (mean +- std)" in df.columns
+        assert "NIH Transferred AUROC (mean +- std)" in df.columns
         assert "Over-Prediction Ratio" in df.columns
+        assert "Specificity Collapse (%)" in df.columns
+        assert "Domain Probe AUROC" in df.columns
         assert any("U-Ones" in p for p in df["Uncertainty Policy"])
 
     def test_build_table5(self, sample_manifest):

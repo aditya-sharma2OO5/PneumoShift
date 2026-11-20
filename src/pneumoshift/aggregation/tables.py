@@ -48,6 +48,7 @@ def dataframe_to_latex(
     df: pd.DataFrame,
     caption: str = "PneumoShift Master Table",
     label: str = "tab:master",
+    notes: Optional[str] = None,
 ) -> str:
     """Converts a pandas DataFrame into publication-ready LaTeX with booktabs formatting.
 
@@ -55,6 +56,7 @@ def dataframe_to_latex(
         df: Input DataFrame.
         caption: Table caption.
         label: Table label for cross-referencing.
+        notes: Optional explanatory notes / footnote appended below table.
 
     Returns:
         Formatted LaTeX table string.
@@ -90,6 +92,9 @@ def dataframe_to_latex(
 
     lines.append(r"\bottomrule")
     lines.append(r"\end{tabular}")
+    if notes:
+        lines.append(r"\par\vspace{4pt}")
+        lines.append(r"\noindent\footnotesize \textit{" + _escape_latex(notes) + r"}")
     lines.append(r"\end{table}")
     lines.append("")
 
@@ -99,6 +104,7 @@ def dataframe_to_latex(
 def dataframe_to_markdown(
     df: pd.DataFrame,
     title: str = "PneumoShift Master Table",
+    notes: Optional[str] = None,
 ) -> str:
     """Converts a pandas DataFrame into GitHub-flavored Markdown table."""
     cols = df.columns.tolist()
@@ -114,6 +120,9 @@ def dataframe_to_markdown(
         lines.append("| " + " | ".join(cells) + " |")
 
     lines.append("")
+    if notes:
+        lines.append(f"*{notes}*")
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -422,7 +431,7 @@ def build_table3_threshold_transfer(manifest: Dict[str, Any]) -> pd.DataFrame:
 
 
 def build_table4_architecture_and_uncertainty(manifest: Dict[str, Any]) -> pd.DataFrame:
-    """Builds Table 4: Architecture & CheXpert Uncertainty Policy Ablations."""
+    """Builds Table 4: Architecture & CheXpert Uncertainty Policy Ablations (CheXpert -> NIH Transfer, Pneumonia AUROC)."""
     p4 = manifest.get("phase4_ablations", {})
     uncert = p4.get("uncertainty_ablation", {})
     multi_seed = p4.get("multi_seed", {})
@@ -439,57 +448,57 @@ def build_table4_architecture_and_uncertainty(manifest: Dict[str, Any]) -> pd.Da
         {
             "Architecture": "DenseNet121",
             "Uncertainty Policy": "U-Zeros (Standard)",
-            "In-Domain AUROC (mean +- std)": "0.752 +- 0.006",
-            "Cross-Domain AUROC (mean +- std)": f"{dn_seed.get('mean_auroc', 0.658):.3f} +- {dn_seed.get('std_auroc', 0.008):.3f}",
+            "CheXpert In-Domain AUROC (mean +- std)": "0.752 +- 0.006",
+            "NIH Transferred AUROC (mean +- std)": f"{dn_seed.get('mean_auroc', 0.658):.3f} +- {dn_seed.get('std_auroc', 0.008):.3f}",
             "Over-Prediction Ratio": f"{uz.get('over_pred_ratio', 1.02):.2f}x",
             "Specificity Collapse (%)": f"{uz.get('spec_drop', 0.0):.1f}%",
-            "Probe AUROC": "0.985",
+            "Domain Probe AUROC": "0.985",
         },
         {
             "Architecture": "DenseNet121",
             "Uncertainty Policy": "U-Ones (Aggressive)",
-            "In-Domain AUROC (mean +- std)": "0.741 +- 0.009",
-            "Cross-Domain AUROC (mean +- std)": "0.612 +- 0.012",
+            "CheXpert In-Domain AUROC (mean +- std)": "0.741 +- 0.009",
+            "NIH Transferred AUROC (mean +- std)": "0.612 +- 0.012",
             "Over-Prediction Ratio": f"{uo.get('over_pred_ratio', 2.45):.2f}x",
             "Specificity Collapse (%)": f"{uo.get('spec_drop', 26.4):.1f}%",
-            "Probe AUROC": "0.991",
+            "Domain Probe AUROC": "0.991",
         },
         {
             "Architecture": "DenseNet121",
             "Uncertainty Policy": "U-Ignore (Masked Loss)",
-            "In-Domain AUROC (mean +- std)": "0.758 +- 0.005",
-            "Cross-Domain AUROC (mean +- std)": "0.672 +- 0.007",
+            "CheXpert In-Domain AUROC (mean +- std)": "0.758 +- 0.005",
+            "NIH Transferred AUROC (mean +- std)": "0.672 +- 0.007",
             "Over-Prediction Ratio": f"{ui.get('over_pred_ratio', 1.08):.2f}x",
             "Specificity Collapse (%)": f"{ui.get('spec_drop', 3.8):.1f}%",
-            "Probe AUROC": "0.978",
+            "Domain Probe AUROC": "0.978",
         },
         # EfficientNet-B0
         {
             "Architecture": "EfficientNet-B0",
             "Uncertainty Policy": "U-Zeros (Standard)",
-            "In-Domain AUROC (mean +- std)": "0.761 +- 0.005",
-            "Cross-Domain AUROC (mean +- std)": f"{eff_seed.get('mean_auroc', 0.700):.3f} +- {eff_seed.get('std_auroc', 0.007):.3f}",
+            "CheXpert In-Domain AUROC (mean +- std)": "0.761 +- 0.005",
+            "NIH Transferred AUROC (mean +- std)": f"{eff_seed.get('mean_auroc', 0.700):.3f} +- {eff_seed.get('std_auroc', 0.007):.3f}",
             "Over-Prediction Ratio": "1.01x",
             "Specificity Collapse (%)": "0.0%",
-            "Probe AUROC": "0.942",
+            "Domain Probe AUROC": "0.942",
         },
         {
             "Architecture": "EfficientNet-B0",
             "Uncertainty Policy": "U-Ones (Aggressive)",
-            "In-Domain AUROC (mean +- std)": "0.748 +- 0.008",
-            "Cross-Domain AUROC (mean +- std)": "0.645 +- 0.010",
+            "CheXpert In-Domain AUROC (mean +- std)": "0.748 +- 0.008",
+            "NIH Transferred AUROC (mean +- std)": "0.645 +- 0.010",
             "Over-Prediction Ratio": "2.28x",
             "Specificity Collapse (%)": "22.8%",
-            "Probe AUROC": "0.955",
+            "Domain Probe AUROC": "0.955",
         },
         {
             "Architecture": "EfficientNet-B0",
             "Uncertainty Policy": "U-Ignore (Masked Loss)",
-            "In-Domain AUROC (mean +- std)": "0.766 +- 0.004",
-            "Cross-Domain AUROC (mean +- std)": "0.712 +- 0.006",
+            "CheXpert In-Domain AUROC (mean +- std)": "0.766 +- 0.004",
+            "NIH Transferred AUROC (mean +- std)": "0.712 +- 0.006",
             "Over-Prediction Ratio": "1.05x",
             "Specificity Collapse (%)": "2.9%",
-            "Probe AUROC": "0.938",
+            "Domain Probe AUROC": "0.938",
         },
     ]
 
@@ -590,6 +599,7 @@ def export_master_table(
     title: str,
     base_name: str,
     output_dir: Union[str, Path] = "results/tables/master",
+    notes: Optional[str] = None,
 ) -> Dict[str, Path]:
     """Exports a master publication table into CSV, JSON, Markdown, and LaTeX formats.
 
@@ -598,6 +608,7 @@ def export_master_table(
         title: Table title / caption.
         base_name: Filename prefix (e.g. 'table1_cross_domain_discrimination').
         output_dir: Target output directory.
+        notes: Optional explanatory notes / footnote appended below table.
 
     Returns:
         Dictionary mapping format ('csv', 'json', 'md', 'tex') to saved Path.
@@ -619,7 +630,7 @@ def export_master_table(
 
     # 3. Markdown
     md_p = out_p / f"{base_name}.md"
-    md_content = dataframe_to_markdown(df, title=title)
+    md_content = dataframe_to_markdown(df, title=title, notes=notes)
     with open(md_p, "w", encoding="utf-8") as f:
         f.write(md_content)
     paths["md"] = md_p
@@ -627,7 +638,7 @@ def export_master_table(
     # 4. LaTeX (with booktabs)
     tex_p = out_p / f"{base_name}.tex"
     label_name = f"tab:{base_name.replace('_', '-')}"
-    tex_content = dataframe_to_latex(df, caption=title, label=label_name)
+    tex_content = dataframe_to_latex(df, caption=title, label=label_name, notes=notes)
     with open(tex_p, "w", encoding="utf-8") as f:
         f.write(tex_content)
     paths["tex"] = tex_p
@@ -659,20 +670,27 @@ def export_all_master_tables(
 
     logger.info("Building and exporting all 6 master publication tables to %s...", out_p)
 
+    table4_notes = (
+        "Note: Uncertainty policies (U-Zeros, U-Ones, U-Ignore) evaluate handling of ambiguous radiological annotations (-1) "
+        "specific to Stanford CheXpert. Accordingly, In-Domain evaluation is measured on the Stanford CheXpert test split, while "
+        "Cross-Domain evaluation reflects zero-shot transfer onto the NIH ChestX-ray14 test split (CheXpert -> NIH). All AUROC values "
+        "denote pneumonia discrimination from multi-label models. Domain Probe AUROC denotes domain classification separability."
+    )
+
     table_builders = [
-        ("table1", "table1_cross_domain_discrimination", "Table 1: Primary Cross-Domain Discrimination & Generalization Gap", lambda: build_table1_cross_domain_discrimination(manifest, hypothesis_records)),
-        ("table2", "table2_calibration_regimes_and_oracle_recovery", "Table 2: 4-Regime Probability Calibration & Oracle Recalibration", lambda: build_table2_calibration_regimes(manifest)),
-        ("table3", "table3_decision_threshold_transfer", "Table 3: Source-Optimal Decision Threshold Transfer Breakdown", lambda: build_table3_threshold_transfer(manifest)),
-        ("table4", "table4_architecture_and_uncertainty_ablations", "Table 4: Architecture & CheXpert Uncertainty Policy Ablations", lambda: build_table4_architecture_and_uncertainty(manifest)),
-        ("table5", "table5_explainability_and_shortcuts_audit", "Table 5: Explainability Saliency Audit, Faithfulness & Shortcut Quantification", lambda: build_table5_explainability_audit(manifest)),
-        ("table6", "table6_hypothesis_testing_summary", "Table 6: Consolidated Hypothesis Testing & Significance Summary", lambda: build_table6_hypothesis_testing(manifest, hypothesis_records)),
+        ("table1", "table1_cross_domain_discrimination", "Table 1: Primary Cross-Domain Discrimination & Generalization Gap", lambda: build_table1_cross_domain_discrimination(manifest, hypothesis_records), None),
+        ("table2", "table2_calibration_regimes_and_oracle_recovery", "Table 2: 4-Regime Probability Calibration & Oracle Recalibration", lambda: build_table2_calibration_regimes(manifest), None),
+        ("table3", "table3_decision_threshold_transfer", "Table 3: Source-Optimal Decision Threshold Transfer Breakdown", lambda: build_table3_threshold_transfer(manifest), None),
+        ("table4", "table4_architecture_and_uncertainty_ablations", "Table 4: Architecture & CheXpert Uncertainty Policy Ablations (CheXpert -> NIH Transfer, Pneumonia AUROC)", lambda: build_table4_architecture_and_uncertainty(manifest), table4_notes),
+        ("table5", "table5_explainability_and_shortcuts_audit", "Table 5: Explainability Saliency Audit, Faithfulness & Shortcut Quantification", lambda: build_table5_explainability_audit(manifest), None),
+        ("table6", "table6_hypothesis_testing_summary", "Table 6: Consolidated Hypothesis Testing & Significance Summary", lambda: build_table6_hypothesis_testing(manifest, hypothesis_records), None),
     ]
 
     exported: Dict[str, Dict[str, Path]] = {}
 
-    for tid, base_name, title, builder in table_builders:
+    for tid, base_name, title, builder, notes in table_builders:
         df = builder()
-        paths = export_master_table(df, title=title, base_name=base_name, output_dir=out_p)
+        paths = export_master_table(df, title=title, base_name=base_name, output_dir=out_p, notes=notes)
         exported[tid] = paths
 
     logger.info("Successfully exported all 6 master publication tables in 4 formats (total 24 files).")
