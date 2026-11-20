@@ -270,3 +270,8 @@ credentials.*
 Thumbs.db
 Desktop.ini
 
+# Internal Forensic Audit Artifacts
+CHANGELOG_CLAIMS.md
+PROVENANCE_TABLE.csv
+
+

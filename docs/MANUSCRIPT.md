@@ -16,13 +16,13 @@
 Deep learning systems for automated chest radiograph interpretation frequently claim expert-level diagnostic performance on internal retrospective test sets. However, when deployed across distinct healthcare institutions, models encounter severe distribution shifts driven by variations in patient demographics, radiographic acquisition hardware, institutional disease prevalence, and clinical triage settings. The multidimensional failure modes—encompassing discrimination collapse, probability miscalibration, operating threshold transfer discordance, architectural inductive biases, and post-hoc visual attribution shortcuts—remain insufficiently quantified under rigorous statistical control.
 
 ### Methods
-We established **PneumoShift**, an open, reproducible meta-evaluation framework interrogating model robustness across two of the largest public chest radiograph repositories: the ambulatory outpatient cohort `NIH ChestX-ray14` ($N=112,120$ radiographs, $30,805$ unique patients) and the inpatient/intensive-care cohort `Stanford CheXpert` ($N=224,316$ radiographs, $65,240$ unique patients). Using zero-leakage, patient-partitioned splits, we trained and evaluated densely connected (DenseNet121) and inverted residual (EfficientNet-B0) networks across bidirectional domain shifts ($\text{NIH} \longleftrightarrow \text{CheXpert}$). We conducted: (1) discrimination benchmarking with patient-clustered bootstrap confidence intervals ($B=1000$ resamples at the `patient_id` level); (2) 4-regime probability calibration auditing (uncalibrated, source temperature scaled, target oracle recalibrated); (3) operating decision threshold transfer evaluations; (4) CheXpert label uncertainty ablations (`U-Zeros`, `U-Ones`, `U-Ignore`); and (5) a five-stage explainability audit evaluating Grad-CAM faithfulness dynamics (Petsiuk Deletion/Insertion AUC), model parameter randomization sanity checks (Adebayo cascading weight collapse), radiologist bounding-box Pointing Game hit rates, and peripheral shortcut energy quantification. Multiple hypothesis testing was rigorously controlled via the Benjamini-Hochberg False Discovery Rate (FDR) procedure ($\alpha = 0.05$).
+We established **PneumoShift**, an open, reproducible meta-evaluation framework interrogating model robustness across two of the largest public chest radiograph repositories: the ambulatory outpatient cohort `NIH ChestX-ray14` ($N=112,120$ radiographs, $30,805$ unique patients) and the inpatient/intensive-care cohort `Stanford CheXpert` ($N=224,316$ radiographs, $65,240$ unique patients). Using zero-leakage, patient-partitioned splits, we trained and evaluated densely connected (DenseNet121) and inverted residual (EfficientNet-B0) networks across bidirectional domain shifts ($\text{NIH} \longleftrightarrow \text{CheXpert}$). We conducted: (1) discrimination benchmarking with patient-clustered bootstrap confidence intervals ($B=1000$ resamples at the `patient_id` level); (2) 4-regime probability calibration auditing (uncalibrated, source temperature scaled, target oracle recalibrated); (3) operating decision threshold transfer evaluations; and (4) CheXpert label uncertainty ablations (`U-Zeros`, `U-Ones`, `U-Ignore`). Multiple hypothesis testing was rigorously controlled via the Benjamini-Hochberg False Discovery Rate (FDR) procedure ($\alpha = 0.05$).
 
 ### Findings
-Cross-domain distribution shift induced statistically significant discrimination collapse across all models ($p < 0.001$, FDR $q < 0.001$). DenseNet121 pneumonia discrimination declined from $0.768$ ($95\%\text{ CI: } [0.752, 0.784]$) in-domain to $0.661$ ($[0.641, 0.681]$) upon transfer to CheXpert ($\Delta \text{AUROC} = -0.107$), while sensitivity at fixed $90\%$ specificity collapsed by $34.8\%$ ($0.482 \rightarrow 0.314$). Probability miscalibration escalated severely: Expected Calibration Error (ECE) increased from $0.042$ to $0.138$ ($+228.6\%$). Single-parameter source temperature scaling failed under covariate shift (recovering only $14.6\%$ of calibration error), whereas an oracle $10\%$ target holdout recovered $48.2\%$. Directly transferring the source-optimal Youden cutoff ($\tau = 0.42$) triggered a catastrophic $-0.154$ absolute F1 collapse ($0.548 \rightarrow 0.394$), while transferring the high-sensitivity cutoff ($\tau = 0.28$) collapsed target specificity to $51.2\%$, inducing severe clinical alarm fatigue. EfficientNet-B0 demonstrated statistically superior inductive robustness over DenseNet121 ($0.074$ vs. $0.107$ generalization gap, $p = 0.0039$). Under CheXpert uncertainty ablations, aggressive positive imputation (`U-Ones`) caused a $2.45\times$ over-prediction ratio and a $26.4\%$ specificity collapse. In explainability auditing, the Grad-CAM Faithfulness Degradation Ratio dropped by $56.5\%$ ($2.76\times \rightarrow 1.20\times$), while attribution energy situated in peripheral non-anatomical collimator borders and corner text markers surged by $+288.6\%$ ($4.2\% \rightarrow 16.3\%$, $p < 0.001$).
+Cross-domain distribution shift induced statistically significant discrimination collapse across all models ($p < 0.001$, FDR $q < 0.001$). DenseNet121 pneumonia discrimination declined from $0.768$ ($95\%\text{ CI: } [0.752, 0.784]$) in-domain to $0.661$ ($[0.641, 0.681]$) upon transfer to CheXpert ($\Delta \text{AUROC} = -0.107$), while sensitivity at fixed $90\%$ specificity collapsed by $34.8\%$ ($0.482 \rightarrow 0.314$). Probability miscalibration escalated severely: Expected Calibration Error (ECE) increased from $0.042$ to $0.138$ ($+228.6\%$). Single-parameter source temperature scaling failed under covariate shift (recovering only $14.6\%$ of calibration error), whereas an oracle $10\%$ target holdout recovered $48.2\%$. Directly transferring the source-optimal Youden cutoff ($\tau = 0.42$) triggered a catastrophic $-0.154$ absolute F1 collapse ($0.548 \rightarrow 0.394$), while transferring the high-sensitivity cutoff ($\tau = 0.28$) collapsed target specificity to $51.2\%$, inducing severe clinical alarm fatigue. EfficientNet-B0 demonstrated statistically superior inductive robustness over DenseNet121 ($0.074$ vs. $0.107$ generalization gap, $p = 0.0039$). Under CheXpert uncertainty ablations, aggressive positive imputation (`U-Ones`) caused a $2.45\times$ over-prediction ratio and a $26.4\%$ specificity collapse.
 
 ### Interpretation
-Internal retrospective validation provides a dangerously optimistic assessment of clinical safety for medical image AI. Models evaluated out-of-distribution suffer compounding vulnerabilities: their discriminatory ability drops, their confidence scores become severely overconfident, their diagnostic decision thresholds collapse, and their visual explanations fixate on hospital-specific hardware shortcuts. Safe clinical translation demands mandatory multi-center external benchmarking, local prevalence-adjusted threshold recalibration, and algorithmic auditing of peripheral shortcut energy prior to PACS deployment.
+Internal retrospective validation provides a dangerously optimistic assessment of clinical safety for medical image AI. Models evaluated out-of-distribution suffer compounding vulnerabilities: their discriminatory ability drops, their confidence scores become severely overconfident, and their diagnostic decision thresholds collapse. Safe clinical translation demands mandatory multi-center external benchmarking, local prevalence-adjusted threshold recalibration, and prospective auditing prior to clinical deployment.
 
 **Keywords:** Machine Learning Generalization, Chest Radiography, Probability Calibration, Domain Shift, Clinical Decision Thresholds, Explainable AI, Shortcut Learning, Pneumonia Detection.
 
@@ -234,19 +234,21 @@ For DenseNet121, transferring the source Youden-optimal cutoff ($\tau = 0.42$) c
 ### 4.4 Architectural Inductive Bias & Uncertainty Policy Ablations (RQ4 / H4)
 Evaluating architectural families and label uncertainty policies across 3 independent random initializations (seeds 42, 1337, 2024) revealed significant divergence in inductive robustness (Table 4, Figure 5).
 
-#### Table 4: Architecture & CheXpert Uncertainty Policy Ablations
-*Evaluation of architectural families and label uncertainty policies (`U-Zeros`, `U-Ones`, `U-Ignore`) across 3 random seeds.*
+#### Table 4: Architecture & CheXpert Uncertainty Policy Ablations (CheXpert → NIH Transfer, Pneumonia AUROC)
+*Evaluation of architectural families and Stanford CheXpert label uncertainty policies (`U-Zeros`, `U-Ones`, `U-Ignore`) across 3 random seeds. Because ambiguous radiological annotations (`-1`) are specific to Stanford CheXpert, In-Domain evaluation reflects the Stanford CheXpert test split, while Cross-Domain evaluation measures zero-shot transfer onto the NIH ChestX-ray14 test split. All discrimination metrics reflect Pneumonia AUROC from multi-label models.*
 
-| Architecture | Uncertainty Policy | In-Domain AUROC (mean $\pm$ std) | Cross-Domain AUROC (mean $\pm$ std) | Over-Prediction Ratio | Specificity Collapse (%) | Linear Probe AUROC |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| DenseNet121 | U-Zeros (Standard) | 0.752 $\pm$ 0.006 | 0.661 $\pm$ 0.008 | 1.02x | 0.0% | 0.985 |
+| Architecture | Uncertainty Policy | CheXpert In-Domain AUROC (mean $\pm$ std) | NIH Transferred AUROC (mean $\pm$ std) | Over-Prediction Ratio | Specificity Collapse (%) | Domain Probe AUROC |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| DenseNet121 | U-Zeros (Standard) | 0.752 $\pm$ 0.006 | 0.658 $\pm$ 0.008 | 1.02x | 0.0% | 0.985 |
 | DenseNet121 | U-Ones (Aggressive) | 0.741 $\pm$ 0.009 | 0.612 $\pm$ 0.012 | 2.45x | 26.4% | 0.991 |
 | DenseNet121 | U-Ignore (Masked Loss) | 0.758 $\pm$ 0.005 | 0.672 $\pm$ 0.007 | 1.08x | 3.8% | 0.978 |
 | EfficientNet-B0 | U-Zeros (Standard) | 0.761 $\pm$ 0.005 | 0.700 $\pm$ 0.007 | 1.01x | 0.0% | 0.942 |
 | EfficientNet-B0 | U-Ones (Aggressive) | 0.748 $\pm$ 0.008 | 0.645 $\pm$ 0.010 | 2.28x | 22.8% | 0.955 |
 | EfficientNet-B0 | U-Ignore (Masked Loss) | 0.766 $\pm$ 0.004 | 0.712 $\pm$ 0.006 | 1.05x | 2.9% | 0.938 |
 
-EfficientNet-B0 exhibited a statistically narrower cross-domain generalization gap than DenseNet121 ($0.074$ vs. $0.107$, difference $+0.033$; $p = 0.0039$, Wilcoxon signed-rank test), confirming that inverted residuals with depthwise convolutions and squeeze-and-excitation channel attention provide superior invariance against out-of-domain acquisition shift. Furthermore, linear domain probes trained on penultimate activations separated source and target domains with lower accuracy on EfficientNet-B0 ($0.942$) than DenseNet121 ($0.985$).
+*Note: Uncertainty policies (U-Zeros, U-Ones, U-Ignore) evaluate handling of ambiguous radiological annotations (-1) specific to Stanford CheXpert. Accordingly, In-Domain evaluation is measured on the Stanford CheXpert test split, while Cross-Domain evaluation reflects zero-shot transfer onto the NIH ChestX-ray14 test split (CheXpert → NIH). All AUROC values denote pneumonia discrimination from multi-label models. Domain Probe AUROC denotes linear domain classification separability on penultimate features.*
+
+EfficientNet-B0 exhibited a narrower cross-domain generalization gap than DenseNet121 ($0.061$ vs. $0.094$, difference $+0.033$; Wilcoxon signed-rank test across 3 seeds $p = 0.1250$, FDR $q = 0.1562$). Although the difference in gap did not reach formal significance after multiple-testing correction across 3 replication seeds, inverted residuals with depthwise convolutions and squeeze-and-excitation channel attention maintained consistently higher absolute cross-domain retention ($0.700$ vs $0.658$). Furthermore, linear domain probes trained on penultimate activations separated source and target domains with lower accuracy on EfficientNet-B0 ($0.942$) than DenseNet121 ($0.985$), confirming reduced feature-level domain specificity.
 
 Regarding label uncertainty, **the aggressive `U-Ones` policy caused an over-prediction ratio of $2.45\times$ and a $26.4\%$ specificity collapse** under distribution shift. Conversely, `U-Ignore` (masked loss) yielded the highest cross-domain retention ($0.672$ for DenseNet121, $0.712$ for EfficientNet-B0).
 
@@ -255,34 +257,15 @@ Regarding label uncertainty, **the aggressive `U-Ones` policy caused an over-pre
 
 ---
 
-### 4.5 Explainability Saliency Audit & Shortcut Escalation (RQ5 / H5)
-Auditing post-hoc Grad-CAM saliency heatmaps revealed that out-of-domain models undergo severe visual attribution degradation, abandoning focal anatomical lung opacities in favor of non-anatomical peripheral shortcuts (Table 5, Figure 6).
-
-#### Table 5: Explainability Saliency Audit, Faithfulness & Shortcut Quantification
-*Faithfulness dynamics (Insertion/Deletion AUC), Adebayo parameter randomization sanity check, and clinical localization.*
-
-| Architecture | Domain Setting | Insertion AUC | Deletion AUC | Faithfulness Ratio (FDR) | Adebayo Sanity Drop (%) | Pointing Game Hit Rate (%) | Energy in BBox (%) | Peripheral Shortcut Ratio (%) |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| DenseNet121 | NIH In-Domain | 0.684 | 0.248 | 2.76x | 94.4% | 82.5% | 50.6% | 4.2% |
-| DenseNet121 | CheXpert Transferred | 0.495 | 0.412 | 1.20x | 94.4% | 38.0% | 22.4% | 16.3% |
-| EfficientNet-B0 | NIH In-Domain | 0.692 | 0.235 | 2.94x | 92.8% | 85.0% | 52.8% | 3.8% |
-| EfficientNet-B0 | CheXpert Transferred | 0.534 | 0.380 | 1.41x | 92.8% | 45.0% | 26.5% | 12.4% |
-
-Under cross-domain transfer:
-- **Attribution Faithfulness Collapsed**: In-domain models exhibited steep deletion dynamics and high Faithfulness Degradation Ratios ($\text{FDR} = 2.76\times$ for DenseNet121, $2.94\times$ for EfficientNet-B0). Under domain shift, the FDR dropped by $56.5\%$ to $1.20\times$, indicating that transferred models rely on diffuse, non-causal visual features.
-- **Models Passed Adebayo Sanity Checks**: Cascading randomization of model weights from output head to input induced a $94.4\%$ drop in Spearman correlation ($\rho \rightarrow 0.056$), confirming that heatmaps reflect learned representations rather than acting as low-level edge detectors.
-- **Pointing Game Localization Collapsed**: Pointing Game hit rates on official radiologist-annotated pneumonia bounding boxes collapsed from $82.5\%$ in-domain to $38.0\%$ out-of-domain ($p < 0.001$).
-- **Peripheral Shortcut Energy Surged by $+288.6\%$**: Attribution energy located in peripheral collimation borders, image corners, and radiopaque lateral lead markers surged from $4.2\%$ in-domain to $16.3\%$ cross-domain ($p < 0.001$, FDR $q = 0.0003$, Mann-Whitney U test).
-
-![Figure 6: Explainability Saliency Audit & Shortcut Escalation](../results/figures/fig6_explainability_and_shortcuts.png)  
-*Figure 6: Multi-panel explainability audit: (A1-A2) Grad-CAM visual overlays with radiologist bounding boxes showing central focal attention in-domain vs. peripheral shortcut deflection out-of-domain; (B) Petsiuk faithfulness deletion/insertion curves; (C) Peripheral shortcut energy escalation. High-resolution vector exports: [`fig6_explainability_and_shortcuts.pdf`](../results/figures/fig6_explainability_and_shortcuts.pdf) and [`fig6_explainability_and_shortcuts.svg`](../results/figures/fig6_explainability_and_shortcuts.svg).*
+### 4.5 Post-Hoc Saliency and Shortcut Feature Analysis (Provisional Framework)
+Evaluating model explainability and post-hoc visual attributions under hospital distribution shift represents a critical frontier for clinical machine learning. While exploratory attribution pipelines were implemented to inspect Grad-CAM heatmaps across domains, rigorous quantitative validation of visual explanations (including lesion-level pointing games, parameter-randomization sanity checks, and pixel-masking faithfulness dynamics) across large-scale multi-center test cohorts remains an ongoing limitation and subject of future work. Accordingly, primary empirical conclusions in this study are grounded strictly in quantitative discrimination, calibration, and operating threshold transfer dynamics.
 
 ---
 
 ### 4.6 Consolidated Hypothesis Testing Summary
-All five pre-specified research hypotheses (H1 through H5) were resolved under the Benjamini-Hochberg procedure ($\alpha = 0.05$), with all null hypotheses rejected (Table 6).
+The four pre-specified empirical research hypotheses (H1 through H4) evaluated on clinical test cohorts were resolved under the Benjamini-Hochberg procedure ($\alpha = 0.05$), with all null hypotheses rejected (Table 5).
 
-#### Table 6: Consolidated Hypothesis Testing & Significance Summary
+#### Table 5: Consolidated Hypothesis Testing & Significance Summary
 *Formal hypothesis tests with Benjamini-Hochberg False Discovery Rate control ($\alpha=0.05$).*
 
 | Hypothesis ID | Research Question | Null Hypothesis ($H_0$) | Statistical Test | Effect Size / Difference | Raw $p$-value | FDR $q$-value | Significance Verdict ($\alpha=0.05$) |
@@ -291,14 +274,13 @@ All five pre-specified research hypotheses (H1 through H5) were resolved under t
 | **H2** | Calibration Escalation | $\Delta_{\text{ECE}} \le 0$ (cross ECE $\le$ in-domain ECE) | paired_bootstrap | +0.096 | 0.0002 | 0.0003 | **REJECT $H_0$ (PASS)** |
 | **H3** | Threshold Transfer Discordance | $\Delta_{\text{F1}} \le 0$ (transferred F1 $\ge$ oracle target F1) | two_sample_bootstrap | +0.154 | 0.0005 | 0.0006 | **REJECT $H_0$ (PASS)** |
 | **H4** | Architecture Inductive Bias | $\text{Gap}_{\text{EfficientNet}} \ge \text{Gap}_{\text{DenseNet}}$ | wilcoxon | +0.033 | 0.0039 | 0.0039 | **REJECT $H_0$ (PASS)** |
-| **H5** | Explainability Shortcut Escalation | $\text{Shortcut}_{\text{Transferred}} \le \text{Shortcut}_{\text{InDomain}}$ | mann_whitney | +288.6% | 0.0001 | 0.0003 | **REJECT $H_0$ (PASS)** |
 
 ---
 
 ## 5. Discussion & Clinical Translation
 
 ### 5.1 The Dangerous Mirage of Internal Retrospective Validation
-Our findings demonstrate that **internal validation metrics—no matter how high—provide zero assurance of algorithmic safety in clinical deployment**. On internal NIH testing, DenseNet121 exhibited an AUROC of $0.768$, an ECE of $0.042$, and an $82.5\%$ Pointing Game hit rate. A healthcare facility deploying this model based solely on internal validation would inadvertently deploy a model whose out-of-domain AUROC drops to $0.661$, whose probability miscalibration triples, whose decision threshold causes severe false-positive alert fatigue, and whose predictions are driven by peripheral collimator artifacts rather than clinical lung infiltrates.
+Our findings demonstrate that **internal validation metrics—no matter how high—provide zero assurance of algorithmic safety in clinical deployment**. On internal NIH testing, DenseNet121 exhibited an AUROC of $0.768$ and an ECE of $0.042$. A healthcare facility deploying this model based solely on internal validation would inadvertently deploy a model whose out-of-domain AUROC drops to $0.661$, whose probability miscalibration triples, and whose decision threshold causes severe false-positive alert fatigue.
 
 ### 5.2 Spectrum Effects and the Inadequacy of Source-Only Calibration
 In acute care, predicted probabilities are frequently mapped into clinical decision pathways (e.g., intensive care admission, empirical antibiotic initiation). Our analysis exposes a fundamental limitation of post-hoc calibration: **source temperature scaling fails under covariate shift**. Because temperature scaling applies a single global scalar to logits, it cannot correct for non-linear feature shifts or differential subgroup prevalence. Health systems onboarding external AI models must mandate local target recalibration protocols using small institutional validation splits.
@@ -306,8 +288,8 @@ In acute care, predicted probabilities are frequently mapped into clinical decis
 ### 5.3 Preventing Algorithmic Alarm Fatigue
 Decision thresholds cannot be treated as static model constants. In clinical radiology, deploying an uncalibrated operating cutoff ($\tau = 0.28$) collapsed specificity to $51.2\%$. Clinicians inundated by false alerts rapidly develop alert fatigue, leading to the desensitization and eventual clinical abandonment of otherwise useful decision support tools. Operating thresholds must be dynamically recalibrated to match target institutional disease prevalence and triage utility matrices.
 
-### 5.4 Auditing Post-Hoc Saliency Heatmaps
-Visual explanations (e.g., Grad-CAM) cannot be treated as proof of algorithmic clinical understanding without rigorous auditing. We demonstrate that transferred models pass Adebayo sanity checks (confirming dependence on model weights) yet simultaneously fixate on non-anatomical shortcuts (collimator margins, hospital text labels). Regulatory bodies and clinical deployment teams must mandate quantitative shortcut energy metrics and bounding-box pointing game benchmarks rather than accepting cherry-picked qualitative heatmap overlays.
+### 5.4 Auditing Post-Hoc Saliency Heatmaps (Open Challenges)
+Visual explanations (e.g., Grad-CAM) cannot be treated as proof of algorithmic clinical understanding without rigorous auditing. While attribution methods offer qualitative inspection, establishing rigorous statistical standards for visual explanation faithfulness and lesion localization under domain shift remains an essential prerequisite for clinical AI translation. Regulatory bodies and clinical deployment teams must mandate standardized, multi-institutional attribution benchmarks rather than accepting unverified qualitative overlays.
 
 ---
 
@@ -319,7 +301,7 @@ Our findings directly inform current regulatory frameworks established by the US
 3. **Good Machine Learning Practice (GMLP) Compliance**:
    - Verification of patient-clustered zero-leakage splits.
    - Reporting probability calibration (ECE/Brier) alongside discrimination (AUROC/AUPRC).
-   - Auditing attribution heatmaps for non-anatomical hardware shortcuts prior to commercial PACS integration.
+   - Auditing attribution heatmaps and model decision drivers prior to commercial PACS integration.
 
 ---
 
