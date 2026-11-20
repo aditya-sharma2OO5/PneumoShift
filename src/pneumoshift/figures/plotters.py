@@ -453,36 +453,74 @@ def load_prediction_bundle(
     return bundle
 
 
+def _get_all_seed_cohort_arrays(
+    bundle: Dict[str, Any],
+    arch: str,
+    split: str,
+) -> List[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray], str]]:
+    """Retrieves all available seed runs (y_true, y_score, y_logits, seed_id) for an architecture and split."""
+    cohorts = bundle.get("cohorts", {})
+    results = []
+
+    # Match all keys containing arch and split, sorted for determinism
+    for k in sorted(cohorts.keys()):
+        k_lower = k.lower()
+        if arch.lower() in k_lower and split.lower() in k_lower:
+            m = re.search(r"_(\d+)$", k)
+            seed_id = m.group(1) if m else "42"
+            c = cohorts[k]
+            results.append((c["y_true"], c["y_score"], c.get("y_logits"), seed_id))
+
+    if not results:
+        yt, yp, yl = _get_cohort_arrays(bundle, arch, split, seed="42")
+        results.append((yt, yp, yl, "42"))
+
+    return results
+
+
 def _get_cohort_arrays(
     bundle: Dict[str, Any],
     arch: str,
     split: str,
     seed: Optional[str] = None,
 ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
-    """Helper to retrieve y_true, y_score, y_logits for a requested cohort."""
+    """Helper to retrieve y_true, y_score, y_logits for a requested cohort.
+
+    Args:
+        bundle: Loaded prediction bundle containing cohort dictionaries.
+        arch: Model architecture name ('densenet121' or 'efficientnet_b0').
+        split: Evaluation split ('test', 'val', or 'cross').
+        seed: Optional random seed (e.g. '42', '1337', '2024'). If None,
+            aggregates prediction probabilities across all available seeds for (arch, split),
+            providing representative multi-seed cohort arrays matching publication tables.
+
+    Returns:
+        (y_true, y_score, y_logits)
+    """
     cohorts = bundle.get("cohorts", {})
-    target_key = None
 
-    # First pass: try to match requested seed or canonical seed 42
-    preferred_seed = str(seed) if seed is not None else "42"
-    for k in cohorts.keys():
-        k_lower = k.lower()
-        if arch.lower() in k_lower and split.lower() in k_lower:
-            if preferred_seed in k:
-                target_key = k
-                break
-
-    # Second pass: if preferred seed not found, match any with arch and split
-    if target_key is None:
+    # If specific seed requested:
+    if seed is not None:
+        target_seed = str(seed)
         for k in cohorts.keys():
             k_lower = k.lower()
-            if arch.lower() in k_lower and split.lower() in k_lower:
-                target_key = k
-                break
+            if arch.lower() in k_lower and split.lower() in k_lower and target_seed in k:
+                c = cohorts[k]
+                return c["y_true"], c["y_score"], c.get("y_logits")
 
-    if target_key and target_key in cohorts:
-        c = cohorts[target_key]
-        return c["y_true"], c["y_score"], c.get("y_logits")
+    # If seed is None: aggregate across all available seeds matching (arch, split)
+    matching = []
+    for k in sorted(cohorts.keys()):
+        k_lower = k.lower()
+        if arch.lower() in k_lower and split.lower() in k_lower:
+            matching.append(cohorts[k])
+
+    if matching:
+        y_true = matching[0]["y_true"]
+        y_score = np.mean([c["y_score"] for c in matching], axis=0)
+        has_logits = all(c.get("y_logits") is not None for c in matching)
+        y_logits = np.mean([c["y_logits"] for c in matching], axis=0) if has_logits else None
+        return y_true, y_score, y_logits
 
     # Fallback to any available match
     for k, c in cohorts.items():
@@ -680,39 +718,99 @@ def plot_fig2_roc_pr_curves(
     baseline_prevalences = []
 
     for name, arch, split, col, ls in models_config:
-        yt, yp, _ = _get_cohort_arrays(bundle, arch=arch, split=split)
-        roc_data = compute_empirical_roc_curve(yt, yp, n_bootstrap=100)
-        pr_data = compute_empirical_pr_curve(yt, yp, n_bootstrap=100)
-        baseline_prevalences.append(pr_data["prevalence"])
+        seed_cohorts = _get_all_seed_cohort_arrays(bundle, arch=arch, split=split)
 
-        # Panel A: ROC Curve
+        # Uniform grids for cross-seed interpolation
+        grid_fpr = np.linspace(0.0, 1.0, 200)
+        grid_rec = np.linspace(0.0, 1.0, 200)
+
+        tprs = []
+        precs = []
+        aucs = []
+        auprcs = []
+        op_fprs = []
+        op_tprs = []
+
+        for yt_s, yp_s, _, _ in seed_cohorts:
+            baseline_prevalences.append(float(np.mean(yt_s)))
+            r_single = compute_empirical_roc_curve(yt_s, yp_s, n_bootstrap=0)
+            p_single = compute_empirical_pr_curve(yt_s, yp_s, n_bootstrap=0)
+
+            # Interpolate TPR onto common FPR grid
+            tpr_interp = np.interp(grid_fpr, r_single["fpr"], r_single["tpr"])
+            tpr_interp[0] = 0.0
+            tpr_interp[-1] = 1.0
+            tprs.append(tpr_interp)
+            aucs.append(r_single["auroc"])
+            op_fprs.append(r_single["op_fpr"])
+            op_tprs.append(r_single["op_tpr"])
+
+            # Interpolate precision onto common recall grid
+            # Exclude single-patient division instability (Recall < 0.01) to anchor at the
+            # clinical operating floor without 1-sample division needle artifacts (1/1 = 1.0).
+            rec_s = p_single["recall"]
+            prec_s = p_single["precision"]
+            mask_emp = rec_s >= 0.01
+            if np.any(mask_emp):
+                rec_emp = rec_s[mask_emp]
+                prec_emp = prec_s[mask_emp]
+                order = np.argsort(rec_emp)
+                prec_interp = np.interp(grid_rec, rec_emp[order], prec_emp[order], left=prec_emp[order][0])
+            else:
+                mask_pos = rec_s > 0.0
+                if np.any(mask_pos):
+                    rec_emp = rec_s[mask_pos]
+                    prec_emp = prec_s[mask_pos]
+                    order = np.argsort(rec_emp)
+                    prec_interp = np.interp(grid_rec, rec_emp[order], prec_emp[order], left=prec_emp[order][0])
+                else:
+                    order = np.argsort(rec_s)
+                    prec_interp = np.interp(grid_rec, rec_s[order], prec_s[order])
+            precs.append(prec_interp)
+            auprcs.append(p_single["auprc"])
+
+        mean_tpr = np.mean(tprs, axis=0)
+        mean_auc = float(np.mean(aucs))
+        mean_prec = np.mean(precs, axis=0)
+        mean_auprc = float(np.mean(auprcs))
+
+        # Multi-seed standard error of the mean (SEM) 95% confidence band
+        if len(seed_cohorts) > 1:
+            n_s = len(seed_cohorts)
+            tpr_sem = np.std(tprs, axis=0) / np.sqrt(n_s)
+            tpr_low = np.clip(mean_tpr - 1.96 * tpr_sem, 0.0, 1.0)
+            tpr_high = np.clip(mean_tpr + 1.96 * tpr_sem, 0.0, 1.0)
+
+            prec_sem = np.std(precs, axis=0) / np.sqrt(n_s)
+            prec_low = np.clip(mean_prec - 1.96 * prec_sem, 0.0, 1.0)
+            prec_high = np.clip(mean_prec + 1.96 * prec_sem, 0.0, 1.0)
+        else:
+            yt_first, yp_first = seed_cohorts[0][0], seed_cohorts[0][1]
+            r_boot = compute_empirical_roc_curve(yt_first, yp_first, n_bootstrap=50)
+            p_boot = compute_empirical_pr_curve(yt_first, yp_first, n_bootstrap=50)
+            tpr_low, tpr_high = r_boot["tpr_low"], r_boot["tpr_high"]
+            prec_low, prec_high = p_boot["prec_low"], p_boot["prec_high"]
+
+        # Panel A: ROC Curve (Area under mean curve == mean AUROC across seeds)
         ax_roc.plot(
-            roc_data["fpr"], roc_data["tpr"],
+            grid_fpr, mean_tpr,
             color=col, linestyle=ls, lw=1.8,
-            label=f"{name} ({roc_data['auroc']:.3f})",
+            label=f"{name} ({mean_auc:.3f})",
         )
-        # Bootstrap 95% Confidence Band
+        # 95% Confidence Band
         ax_roc.fill_between(
-            roc_data["grid_fpr"], roc_data["tpr_low"], roc_data["tpr_high"],
+            grid_fpr, tpr_low, tpr_high,
             color=col, alpha=0.10,
         )
-        # Youden Operating Point (Sitting strictly ON the curve)
-        ax_roc.plot(
-            roc_data["op_fpr"], roc_data["op_tpr"],
-            marker="o", markersize=5.0, color=col,
-            markeredgecolor="white", markeredgewidth=0.8,
-        )
 
-        # Panel B: PR Curve
-        # Order recall ascending for clean matplotlib polygon rendering
-        order = np.argsort(pr_data["recall"])
+        # Panel B: PR Curve (Area under mean curve == mean AUPRC across seeds)
         ax_pr.plot(
-            pr_data["recall"][order], pr_data["precision"][order],
+            grid_rec, mean_prec,
             color=col, linestyle=ls, lw=1.8,
-            label=f"{name} ({pr_data['auprc']:.3f})",
+            label=f"{name} ({mean_auprc:.3f})",
         )
         ax_pr.fill_between(
-            pr_data["grid_rec"], pr_data["prec_low"], pr_data["prec_high"],
+            grid_rec, prec_low, prec_high,
             color=col, alpha=0.10,
         )
 
@@ -730,7 +828,7 @@ def plot_fig2_roc_pr_curves(
     avg_prev = float(np.mean(baseline_prevalences)) if baseline_prevalences else 0.022
     ax_pr.axhline(avg_prev, color=PALETTE["gray"], linestyle=":", lw=1.2, label=f"Cohort Prevalence ({avg_prev*100:.1f}%)")
     ax_pr.set_xlim(-0.02, 1.02)
-    ax_pr.set_ylim(0.0, 0.65)
+    ax_pr.set_ylim(-0.01, 0.40)
     ax_pr.set_xlabel("Recall (Sensitivity)")
     ax_pr.set_ylabel("Precision (Positive Predictive Value)")
     ax_pr.set_title("B: Precision-Recall (PR) Curves", weight="bold")
