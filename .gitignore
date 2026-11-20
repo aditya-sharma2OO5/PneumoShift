@@ -273,5 +273,7 @@ Desktop.ini
 # Internal Forensic Audit Artifacts
 CHANGELOG_CLAIMS.md
 PROVENANCE_TABLE.csv
+VERIFY_REPORT.md
+scripts/verify_step2_analysis.py
 
 
