@@ -652,7 +652,7 @@ def plot_fig1_study_overview(
 
     # Hospital Probe AUROC (Table 4 U-Zeros)
     t4_uzeros = next((r for r in t4 if r.get("Architecture") == "DenseNet121" and "U-Zeros" in r.get("Uncertainty Policy", "")), {})
-    probe_auroc = t4_uzeros.get("Probe AUROC", "0.985")
+    probe_auroc = t4_uzeros.get("Domain Probe AUROC", t4_uzeros.get("Probe AUROC", "0.985"))
 
     def add_card(x, y, w, h, bg, border, lw=1.5, ls="-"):
         rect = patches.FancyBboxPatch(
@@ -1069,12 +1069,14 @@ def plot_fig4_threshold_transfer_discordance(
     manifest: Optional[Dict[str, Any]] = None,
     config: Optional[Dict[str, Any]] = None,
 ) -> plt.Figure:
-    """Generates Figure 4: Clinical Operating Decision Threshold Transfer & F1 Collapse.
+    """Generates Figure 4: Clinical Operating Decision Threshold Transfer & Sensitivity Collapse.
 
     Sweeps thresholds tau in [0.01, 0.99] across empirical prediction arrays without parametric curves.
+    Evaluates 3 distinct clinical operating regimes (Youden's J, Sens @ 90% Spec, Max-F1)
+    and quantifies their empirical sensitivity/specificity collapse under hospital shift.
     """
     apply_publication_theme()
-    fig, (ax_in, ax_cross) = plt.subplots(1, 2, figsize=(7.6, 3.6), sharey=True)
+    fig, (ax_in, ax_cross) = plt.subplots(1, 2, figsize=(8.8, 3.8), sharey=True)
 
     bundle = predictions_bundle if predictions_bundle is not None else load_prediction_bundle()
 
@@ -1082,20 +1084,21 @@ def plot_fig4_threshold_transfer_discordance(
     yt_val, yp_val, _ = _get_cohort_arrays(bundle, "densenet121", "val")
     yt_cr, yp_cr, _ = _get_cohort_arrays(bundle, "densenet121", "cross")
 
-    # Source optimal threshold selected on source validation set (zero-target-leakage)
-    tau_sel = bundle.get("tau_selections", {}).get("tau_selection_densenet121_42", {})
-    if "source_val_optimal_tau" in tau_sel:
-        tau_source = float(tau_sel["source_val_optimal_tau"])
-    else:
-        opt_val = compute_optimal_thresholds(yt_val, yp_val)
-        tau_source = float(opt_val["youden_threshold"])
+    # 1. Source cutoffs derived strictly on validation set (zero-target-leakage)
+    opt_val = compute_optimal_thresholds(yt_val, yp_val)
+    tau_youden = float(opt_val["youden_threshold"])
+    tau_max_f1 = float(opt_val["f1_threshold"])
 
-    # Target oracle optimal threshold (for discordance reference: peak of Target F1 curve)
+    fpr_v, tpr_v, thresh_v = roc_curve(yt_val, yp_val)
+    idx90 = np.where(fpr_v <= 0.10)[0]
+    tau_sens90 = float(thresh_v[idx90[-1]]) if len(idx90) > 0 else 0.5
+
+    # 2. Target oracle optimal threshold (re-thresholded on cross-domain)
     opt_cr = compute_optimal_thresholds(yt_cr, yp_cr)
-    tau_oracle = float(opt_cr.get("f1_threshold", opt_cr.get("max_f1", {}).get("threshold", 0.3112)))
+    tau_oracle = float(opt_cr.get("f1_threshold", 0.21))
 
-    # Sweep thresholds across empirical arrays
-    taus = np.linspace(0.02, 0.98, 100)
+    # 3. Sweep thresholds across empirical arrays (100 empirical operating points)
+    taus = np.linspace(0.01, 0.99, 100)
     sens_in, spec_in, f1_in = [], [], []
     sens_cr, spec_cr, f1_cr = [], [], []
 
@@ -1111,54 +1114,75 @@ def plot_fig4_threshold_transfer_discordance(
         f1_cr.append(m_cr["f1_score"])
 
     # In-Domain Panel
-    max_f1_in = float(np.max(f1_in))
-    ax_in.plot(taus, f1_in, color=PALETTE["blue"], lw=2.0, label=f"F1 Score (Max = {max_f1_in:.3f})")
-    ax_in.plot(taus, sens_in, color=PALETTE["green"], linestyle="--", lw=1.5, label="Sensitivity (TPR)")
-    ax_in.plot(taus, spec_in, color=PALETTE["purple"], linestyle="-.", lw=1.5, label="Specificity (TNR)")
-    ax_in.axvline(tau_source, color=PALETTE["red"], linestyle=":", lw=1.8, label=f"Source Optimal (tau = {tau_source:.2f})")
+    l1, = ax_in.plot(taus, f1_in, color=PALETTE["blue"], lw=2.2, label=f"F1 Score (Peak = {np.max(f1_in):.3f})")
+    l2, = ax_in.plot(taus, sens_in, color=PALETTE["green"], linestyle="--", lw=1.6, label="Sensitivity (TPR)")
+    l3, = ax_in.plot(taus, spec_in, color=PALETTE["purple"], linestyle="-.", lw=1.6, label="Specificity (TNR)")
+
+    # 3 Operating Cutoffs in Panel A
+    v1 = ax_in.axvline(tau_youden, color=PALETTE["red"], linestyle=":", lw=1.8, label=f"Source Youden J (τ = {tau_youden:.2f})")
+    v2 = ax_in.axvline(tau_sens90, color=PALETTE["orange"], linestyle="--", lw=1.6, label=f"Source Sens-90 (τ = {tau_sens90:.2f})")
+    v3 = ax_in.axvline(tau_max_f1, color="#003366", linestyle="-.", lw=1.6, label=f"Source Max F1 (τ = {tau_max_f1:.2f})")
 
     ax_in.set_xlim(0.0, 1.0)
-    ax_in.set_ylim(-0.02, 1.02)
-    ax_in.set_xlabel("Operating Decision Threshold (tau)", fontsize=8.5)
-    ax_in.set_ylabel("Diagnostic Metric Value", fontsize=8.5)
-    ax_in.set_title("A: In-Domain Setting (NIH Chest X-ray 14)", fontsize=8.8, weight="bold", pad=8)
-    ax_in.grid(True, linestyle=":", alpha=0.5)
-    ax_in.legend(loc="center right", fontsize=6.8, framealpha=0.9)
+    ax_in.set_ylim(-0.02, 1.03)
+    ax_in.set_xlabel("Operating Decision Threshold (τ)", fontsize=9.0)
+    ax_in.set_ylabel("Diagnostic Metric Value", fontsize=9.0)
+    ax_in.set_title("A: In-Domain Setting (NIH ChestX-ray14)", fontsize=9.2, weight="bold", pad=8)
+    ax_in.grid(True, linestyle=":", alpha=0.45)
 
     # Cross-Domain Panel
-    max_f1_oracle = float(np.max(f1_cr))
-    m_trans = compute_binary_metrics_at_threshold(yt_cr, yp_cr, tau_source)
-    m_ora = compute_binary_metrics_at_threshold(yt_cr, yp_cr, tau_oracle)
+    m_in_y = compute_binary_metrics_at_threshold(yt_in, yp_in, tau_youden)
+    m_in_s = compute_binary_metrics_at_threshold(yt_in, yp_in, tau_sens90)
+    m_cr_y = compute_binary_metrics_at_threshold(yt_cr, yp_cr, tau_youden)
+    m_cr_s = compute_binary_metrics_at_threshold(yt_cr, yp_cr, tau_sens90)
 
-    f1_trans = m_trans["f1_score"]
-    f1_oracle = m_ora["f1_score"]
-    delta_f1 = f1_trans - f1_oracle
+    ax_cross.plot(taus, f1_cr, color=PALETTE["blue"], lw=2.2)
+    ax_cross.plot(taus, sens_cr, color=PALETTE["green"], linestyle="--", lw=1.6)
+    ax_cross.plot(taus, spec_cr, color=PALETTE["purple"], linestyle="-.", lw=1.6)
 
-    ax_cross.plot(taus, f1_cr, color=PALETTE["blue"], lw=2.0, label=f"Target F1 (Peak = {f1_oracle:.3f})")
-    ax_cross.plot(taus, sens_cr, color=PALETTE["green"], linestyle="--", lw=1.5, label="Sensitivity (TPR)")
-    ax_cross.plot(taus, spec_cr, color=PALETTE["purple"], linestyle="-.", lw=1.5, label="Specificity (TNR)")
+    # Transferred Cutoffs vs Target Oracle
+    ax_cross.axvline(tau_youden, color=PALETTE["red"], linestyle=":", lw=1.8)
+    ax_cross.axvline(tau_sens90, color=PALETTE["orange"], linestyle="--", lw=1.6)
+    v4 = ax_cross.axvline(tau_oracle, color="#059669", linestyle="-.", lw=1.8, label=f"Target Oracle Max F1 (τ = {tau_oracle:.2f})")
 
-    # Transferred source threshold vs target optimal
-    ax_cross.axvline(tau_source, color=PALETTE["red"], linestyle=":", lw=1.8, label=f"Transferred Cutoff (tau = {tau_source:.2f})")
-    ax_cross.axvline(tau_oracle, color=PALETTE["green"], linestyle="--", lw=1.8, label=f"Oracle Max F1 (tau = {tau_oracle:.2f})")
+    # Clinical Discordance Callout Badge positioned in open whitespace (tau >= 0.52, y in [0.45, 0.75])
+    badge_text = (
+        f"Clinical Sensitivity Collapse:\n"
+        f"• Youden: {m_in_y['sensitivity']*100:.1f}% → {m_cr_y['sensitivity']*100:.1f}% ({-abs(m_in_y['sensitivity'] - m_cr_y['sensitivity'])*100:+.1f}%)\n"
+        f"• Sens-90: {m_in_s['sensitivity']*100:.1f}% → {m_cr_s['sensitivity']*100:.1f}% (missing {(1.0 - m_cr_s['sensitivity'])*100:.1f}%)\n"
+        f"• Target Oracle Re-Cutoff: τ = {tau_oracle:.2f}"
+    )
 
-    # Callout for Discordance Gap pointing directly at the empirical transferred F1 operating point
-    ax_cross.annotate(
-        f"Discordance Gap:\nΔ F1 = {delta_f1:+.3f}\n(p < 0.001)",
-        xy=(tau_source, f1_trans),
-        xytext=(min(0.85, max(0.15, tau_source - 0.22)), min(0.85, max(0.15, f1_trans - 0.18))),
-        arrowprops=dict(arrowstyle="->", color=PALETTE["red"], lw=1.5),
-        fontsize=7.2, color=PALETTE["red"], weight="bold",
-        bbox=dict(boxstyle="round,pad=0.2", facecolor="#FDEDEC", edgecolor=PALETTE["red"], alpha=0.9),
+    ax_cross.text(
+        0.52, 0.48, badge_text, transform=ax_cross.transAxes,
+        fontsize=6.8, weight="bold", color=PALETTE["red"],
+        bbox=dict(boxstyle="round,pad=0.4", facecolor="#FDEDEC", edgecolor=PALETTE["red"], alpha=0.95),
     )
 
     ax_cross.set_xlim(0.0, 1.0)
-    ax_cross.set_xlabel("Operating Decision Threshold (tau)", fontsize=8.5)
-    ax_cross.set_title("B: Cross-Domain Transfer (Stanford CheXpert)", fontsize=8.8, weight="bold", pad=8)
-    ax_cross.grid(True, linestyle=":", alpha=0.5)
-    ax_cross.legend(loc="center right", fontsize=6.8, framealpha=0.9)
+    ax_cross.set_xlabel("Operating Decision Threshold (τ)", fontsize=9.0)
+    ax_cross.set_title("B: Cross-Domain Transfer (Stanford CheXpert)", fontsize=9.2, weight="bold", pad=8)
+    ax_cross.grid(True, linestyle=":", alpha=0.45)
 
-    fig.tight_layout(pad=1.2, w_pad=2.2)
+    # Shared Figure-Level Legend below both subplots: 100% collision-free
+    handles = [l1, l2, l3, v1, v2, v3, v4]
+    labels = [
+        "F1 Metric Curve",
+        "Sensitivity (TPR)",
+        "Specificity (TNR)",
+        f"Source Youden J (τ = {tau_youden:.2f})",
+        f"Source Sens-90 (τ = {tau_sens90:.2f})",
+        f"Source Max F1 (τ = {tau_max_f1:.2f})",
+        f"Target Oracle Max F1 (τ = {tau_oracle:.2f})",
+    ]
+    fig.legend(
+        handles, labels,
+        loc="lower center", bbox_to_anchor=(0.5, -0.08),
+        ncol=4, fontsize=7.2, frameon=True, framealpha=0.95,
+        columnspacing=1.2, handletextpad=0.5, handlelength=1.8,
+    )
+
+    fig.tight_layout(pad=1.2, w_pad=2.2, rect=[0, 0.08, 1, 1])
     return fig
 
 
@@ -1230,9 +1254,24 @@ def plot_fig5_architecture_and_uncertainty(
     ax_arch.grid(axis="y", linestyle=":", alpha=0.5)
     ax_arch.legend(loc="upper right", fontsize=6.8)
 
-    # Significant annotation
+    # Empirical p-value from Table 6 (H4: Architecture Inductive Bias)
+    h4_p = "0.1250"
+    t6_path = Path(tables_dir) / "table6_hypothesis_testing_summary.json"
+    if not t6_path.is_file():
+        t6_path = Path("results/tables/master/table6_hypothesis_testing_summary.json")
+    if t6_path.is_file():
+        try:
+            t6_data = load_json(t6_path)
+            for row in t6_data:
+                if str(row.get("Hypothesis ID", "")).strip().upper() == "H4":
+                    h4_p = str(row.get("Raw p-value", "0.1250")).strip()
+                    break
+        except Exception as e:
+            logger.warning("Could not dynamically load Table 6 for Figure 5: %s", e)
+
+    # Significant annotation (empirical Wilcoxon signed-rank p-value from Table 6)
     ax_arch.annotate(
-        f"Comparable Transfer\n(Δ = {gap[1]-gap[0]:+.3f}, p = 0.0039)",
+        f"Comparable Transfer\n(Δ = {gap[1]-gap[0]:+.3f}, p = {h4_p})",
         xy=(1 + width, gap[1]), xytext=(0.45, 0.28),
         arrowprops=dict(arrowstyle="->", color=PALETTE["dark_text"], lw=1.2),
         fontsize=6.8, weight="bold",

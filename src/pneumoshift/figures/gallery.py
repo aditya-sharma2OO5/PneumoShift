@@ -120,7 +120,7 @@ def build_gallery_html(
         ("table1", "table1_cross_domain_discrimination.json", "Table 1: Cross-Domain Discrimination Benchmark"),
         ("table2", "table2_calibration_regimes_and_oracle_recovery.json", "Table 2: 4-Regime Probability Calibration & Oracle Recalibration"),
         ("table3", "table3_decision_threshold_transfer.json", "Table 3: Source-Optimal Decision Threshold Transfer Breakdown"),
-        ("table4", "table4_architecture_and_uncertainty_ablations.json", "Table 4: Architecture & CheXpert Uncertainty Policy Ablations"),
+        ("table4", "table4_architecture_and_uncertainty_ablations.json", "Table 4: Architecture & CheXpert Uncertainty Policy Ablations (CheXpert -> NIH Transfer, Pneumonia AUROC)"),
         ("table5", "table5_explainability_and_shortcuts_audit.json", "Table 5: Explainability Saliency Audit, Faithfulness & Shortcuts"),
         ("table6", "table6_hypothesis_testing_summary.json", "Table 6: Consolidated Hypothesis Testing & Significance Summary"),
     ]
