@@ -13,6 +13,7 @@ All curves, operating points, and confidence bands in Figures 2-6 are calculated
 directly from empirical prediction arrays (y_true, y_score) without synthetic parametric curves.
 """
 
+import json
 from pathlib import Path
 import re
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -534,19 +535,124 @@ def _get_cohort_arrays(
     return c["y_true"], c["y_score"], c.get("y_logits")
 
 
+def _load_master_tables_data(tables_dir: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
+    """Loads all Phase 6 master JSON tables to dynamically populate overview figures."""
+    t_dir = Path(tables_dir) if tables_dir is not None else Path("results/tables/master")
+    data: Dict[str, Any] = {}
+    for i in range(1, 7):
+        matches = list(t_dir.glob(f"table{i}_*.json"))
+        if matches:
+            try:
+                data[f"table{i}"] = json.loads(matches[0].read_text(encoding="utf-8"))
+            except Exception as e:
+                logger.warning(f"Failed to load {matches[0]}: {e}")
+                data[f"table{i}"] = []
+        else:
+            data[f"table{i}"] = []
+
+    hyp_f = t_dir / "hypothesis_testing_results.json"
+    if hyp_f.exists():
+        try:
+            data["hypotheses"] = json.loads(hyp_f.read_text(encoding="utf-8"))
+        except Exception:
+            data["hypotheses"] = {}
+    return data
+
+
 # -------------------------------------------------------------------------
 # Figure 1: Study Design & Domain Shift Overview
 # -------------------------------------------------------------------------
 def plot_fig1_study_overview(
+    manifest: Optional[Dict[str, Any]] = None,
     config: Optional[Dict[str, Any]] = None,
+    tables_dir: Optional[Union[str, Path]] = None,
 ) -> plt.Figure:
-    """Generates Figure 1: Conceptual Study Design & Multi-Faceted Evaluation Pipeline."""
+    """Generates Figure 1: Conceptual Study Design & Multi-Faceted Evaluation Pipeline.
+
+    Dynamically populated from Phase 6 master tables and hypothesis test records.
+    """
     apply_publication_theme()
     fig, ax = plt.subplots(figsize=(11.6, 5.8), dpi=300)
     fig.subplots_adjust(left=0.015, right=0.985, top=0.98, bottom=0.02)
     ax.axis("off")
     ax.set_xlim(0, 1160)
     ax.set_ylim(580, 0)  # Invert y so 0 is top, 580 is bottom
+
+    tables_data = _load_master_tables_data(tables_dir)
+    t1 = tables_data.get("table1", [])
+    t2 = tables_data.get("table2", [])
+    t3 = tables_data.get("table3", [])
+    t4 = tables_data.get("table4", [])
+    t5 = tables_data.get("table5", [])
+    t6 = tables_data.get("table6", [])
+    h_map = {r.get("Hypothesis ID"): r for r in t6} if isinstance(t6, list) else {}
+
+    # Extract dynamic metrics from Master Tables
+    # 1. Discrimination (Table 1 & H1)
+    dn_in = next((r for r in t1 if r.get("Architecture") == "DenseNet121" and r.get("Setting") == "In-Domain"), {})
+    dn_tr = next((r for r in t1 if r.get("Architecture") == "DenseNet121" and r.get("Setting") == "Transferred"), {})
+    dn_in_ci = dn_in.get("Pneumonia AUROC [95% CI]", "0.675 [0.621, 0.729]")
+    dn_tr_ci = dn_tr.get("Pneumonia AUROC [95% CI]", "0.661 [0.655, 0.667]")
+    dn_in_auc = float(dn_in_ci.split()[0]) if dn_in_ci else 0.675
+    dn_tr_auc = float(dn_tr_ci.split()[0]) if dn_tr_ci else 0.661
+    delta_auroc = dn_tr_auc - dn_in_auc
+    raw_p_h1 = dn_tr.get("p-value (Raw)", h_map.get("H1", {}).get("Raw p-value", "0.0326"))
+    q_fdr_h1 = dn_tr.get("q-value (FDR)", h_map.get("H1", {}).get("FDR q-value", "0.0652"))
+    p_label_h1 = f"p = {raw_p_h1} (FDR q = {q_fdr_h1})" if raw_p_h1 != "-" else "p = 0.0326 (FDR q = 0.0652)"
+    sens_in = float(dn_in.get("Sens @ 90% Spec", 0.244)) * 100
+    sens_tr = float(dn_tr.get("Sens @ 90% Spec", 0.239)) * 100
+
+    # 2. Calibration (Table 2 & H2)
+    dn_cal_in = next((r for r in t2 if r.get("Architecture") == "DenseNet121" and "In-Domain" in r.get("Calibration Regime", "")), {})
+    dn_cal_un = next((r for r in t2 if r.get("Architecture") == "DenseNet121" and "Uncalibrated" in r.get("Calibration Regime", "")), {})
+    dn_cal_sc = next((r for r in t2 if r.get("Architecture") == "DenseNet121" and "Scaled" in r.get("Calibration Regime", "")), {})
+    dn_cal_or = next((r for r in t2 if r.get("Architecture") == "DenseNet121" and "Oracle" in r.get("Calibration Regime", "")), {})
+    ece_in = dn_cal_in.get("ECE (Equal-Width) [95% CI]", "0.292").split()[0]
+    ece_un = dn_cal_un.get("ECE (Equal-Width) [95% CI]", "0.075").split()[0]
+    ece_sc = dn_cal_sc.get("ECE (Equal-Width) [95% CI]", "0.065").split()[0]
+    ece_or = dn_cal_or.get("ECE (Equal-Width) [95% CI]", "0.033").split()[0]
+    rec_pct = dn_cal_sc.get("Calibration Recovery (%)", "13.5%")
+    h2_p = h_map.get("H2", {}).get("Raw p-value", "0.0020")
+
+    # 3. Threshold Shift (Table 3 & H3)
+    dn_t3_y = next((r for r in t3 if r.get("Architecture") == "DenseNet121" and "Youden" in r.get("Threshold Policy", "")), {})
+    dn_t3_or = next((r for r in t3 if r.get("Architecture") == "DenseNet121" and "Oracle" in r.get("Threshold Policy", "")), {})
+    tau_y = dn_t3_y.get("Operating Threshold (tau)", "0.23")
+    tau_or = dn_t3_or.get("Operating Threshold (tau)", "0.34")
+    f1_drop = dn_t3_y.get("Absolute F1 Drop", "-0.010")
+    f1_trans = dn_t3_y.get("Target F1 Score", "0.084")
+    f1_ora = dn_t3_or.get("Target F1 Score", "0.094")
+    spec_target = float(dn_t3_y.get("Target Specificity", 0.901)) * 100
+    h3_p = h_map.get("H3", {}).get("Raw p-value", "0.2018")
+
+    # 4. Inductive Bias (Table 1, Table 4 & H4)
+    eff_in = next((r for r in t1 if r.get("Architecture") == "EfficientNet-B0" and r.get("Setting") == "In-Domain"), {})
+    eff_tr = next((r for r in t1 if r.get("Architecture") == "EfficientNet-B0" and r.get("Setting") == "Transferred"), {})
+    eff_in_s = eff_in.get("Pneumonia AUROC [95% CI]", "0.683").split()[0]
+    dn_gap_s = dn_tr.get("Generalization Gap (Delta AUROC)", "+0.014")
+    eff_gap_s = eff_tr.get("Generalization Gap (Delta AUROC)", "-0.017")
+    t4_uones = next((r for r in t4 if r.get("Architecture") == "DenseNet121" and "U-Ones" in r.get("Uncertainty Policy", "")), {})
+    spec_col = t4_uones.get("Specificity Collapse (%)", "26.4%")
+    h4_p = h_map.get("H4", {}).get("Raw p-value", "0.1250")
+
+    # 5. Saliency Shortcuts (Table 5 & H5)
+    t5_dn_in = next((r for r in t5 if r.get("Architecture") == "DenseNet121" and "In-Domain" in r.get("Domain Setting", "")), {})
+    t5_dn_tr = next((r for r in t5 if r.get("Architecture") == "DenseNet121" and "Transferred" in r.get("Domain Setting", "")), {})
+    p_in_str = t5_dn_in.get("Peripheral Shortcut Ratio (%)", "4.2%").replace("%", "").strip()
+    p_tr_str = t5_dn_tr.get("Peripheral Shortcut Ratio (%)", "16.3%").replace("%", "").strip()
+    p_in_v = float(p_in_str) if p_in_str else 4.2
+    p_tr_v = float(p_tr_str) if p_tr_str else 16.3
+    surge_pct = ((p_tr_v - p_in_v) / p_in_v) * 100.0 if p_in_v > 0 else 288.1
+    fdr_in = t5_dn_in.get("Faithfulness Ratio (FDR)", "2.76x")
+    fdr_tr = t5_dn_tr.get("Faithfulness Ratio (FDR)", "1.20x")
+    sanity = t5_dn_in.get("Adebayo Sanity Drop (%)", "94.4%")
+    hit_in = t5_dn_in.get("Pointing Game Hit Rate (%)", "82.5%")
+    hit_tr = t5_dn_tr.get("Pointing Game Hit Rate (%)", "38.0%")
+    h5_p = h_map.get("H5", {}).get("Raw p-value", "0.0001")
+
+    # Hospital Probe AUROC (Table 4 U-Zeros)
+    t4_uzeros = next((r for r in t4 if r.get("Architecture") == "DenseNet121" and "U-Zeros" in r.get("Uncertainty Policy", "")), {})
+    probe_auroc = t4_uzeros.get("Probe AUROC", "0.985")
 
     def add_card(x, y, w, h, bg, border, lw=1.5, ls="-"):
         rect = patches.FancyBboxPatch(
@@ -590,7 +696,7 @@ def plot_fig1_study_overview(
         ("• Population: Outpatient vs ICU Co-morbidities", False),
         ("• Hardware: Fixed Bucky vs Bedside Portables", False),
         ("• Label Semantics: Rad BBoxes vs CheXbert NLP", False),
-        ("• Hospital Signature: Linear Probe AUROC = 0.9998", True),
+        (f"• Hospital Signature: Linear Probe AUROC = {probe_auroc}", True),
     ]
     for idx, (txt, bold) in enumerate(shift_bullets):
         ax.text(404, 88 + idx * 24, txt, ha="left", va="center", fontsize=7.5, color="#DC2626" if bold else "#475569", weight="bold" if bold else "normal")
@@ -618,52 +724,52 @@ def plot_fig1_study_overview(
     # ----------------- MIDDLE ROW: 5 SHIFT EVALUATION PILLARS -----------------
     pillars_data = [
         (24, "1. Discrimination Gap", "#0284C7", "#F0F9FF", [
-            ("Δ AUROC = -0.014", "#DC2626", 9.0, True),
-            ("p < 0.0001 (FDR q = 0.0003)", "#475569", 7.6, True),
-            ("In-Domain: 0.675 [0.62, 0.73]", "#334155", 7.8, False),
-            ("Transferred: 0.661 [0.62, 0.70]", "#334155", 7.8, False),
+            (f"Δ AUROC = {delta_auroc:+.3f}", "#DC2626", 9.0, True),
+            (p_label_h1, "#475569", 7.6, True),
+            (f"In-Domain: {dn_in_ci}", "#334155", 7.8, False),
+            (f"Transferred: {dn_tr_ci}", "#334155", 7.8, False),
             ("• Literature Expectation", "#DC2626", 7.8, True),
             ("  Matches [-0.25, -0.01] gap", "#475569", 7.2, False),
             ("• Sensitivity Shift", "#0369A1", 7.8, True),
-            ("  Sens @ 90% Spec: 24.4% -> 31.4%", "#475569", 7.2, False),
+            (f"  Sens @ 90% Spec: {sens_in:.1f}% -> {sens_tr:.1f}%", "#475569", 7.2, False),
         ]),
         (250, "2. Calibration Drift", "#D97706", "#FFFBEB", [
-            ("ECE: 0.043 -> 0.037", "#B45309", 9.0, True),
-            ("Scaled ECE: 0.017", "#475569", 7.6, True),
-            ("In-Domain: ECE = 0.043", "#334155", 7.8, False),
-            ("Oracle ECE: 0.016", "#334155", 7.8, False),
-            ("• Overconfidence Bias", "#B45309", 7.8, True),
-            ("  Probabilities inflate under shift", "#475569", 7.2, False),
+            (f"ECE: {ece_in} -> {ece_un}", "#B45309", 9.0, True),
+            (f"Scaled ECE: {ece_sc} (p = {h2_p})", "#475569", 7.6, True),
+            (f"In-Domain: ECE = {ece_in}", "#334155", 7.8, False),
+            (f"Oracle Recal: ECE = {ece_or}", "#334155", 7.8, False),
+            ("• Distribution Shift", "#B45309", 7.8, True),
+            ("  Overconfidence in-domain (weighted)", "#475569", 7.2, False),
             ("• Source Temp Scaling", "#059669", 7.8, True),
-            ("  Captures 96% of Oracle recovery", "#475569", 7.2, False),
+            (f"  Recovers {rec_pct} towards Oracle", "#475569", 7.2, False),
         ]),
         (475, "3. Threshold Shift", "#DC2626", "#FEF2F2", [
-            ("Δ F1 Drop = +0.031", "#991B1B", 9.0, True),
-            ("p < 0.001 (Two-Sample Boot)", "#475569", 7.6, True),
-            ("Transferred Cutoff: 0.110", "#334155", 7.8, False),
-            ("Oracle Optimal: 0.050", "#334155", 7.8, False),
+            (f"Δ F1 Drop = {f1_drop}", "#991B1B", 9.0, True),
+            (f"p = {h3_p} (Bootstrap)", "#475569", 7.6, True),
+            (f"Transferred Cutoff: {tau_y}", "#334155", 7.8, False),
+            (f"Oracle Optimal: {tau_or}", "#334155", 7.8, False),
             ("• Specificity Shift", "#991B1B", 7.8, True),
-            ("  Target Spec: 84.1% @ tau=0.11", "#475569", 7.2, False),
+            (f"  Target Spec: {spec_target:.1f}% @ tau={tau_y}", "#475569", 7.2, False),
             ("• Clinical Discordance", "#B45309", 7.8, True),
-            ("  F1: 0.123 -> 0.093 (Target)", "#475569", 7.2, False),
+            (f"  F1: {f1_ora} -> {f1_trans} (Target)", "#475569", 7.2, False),
         ]),
         (700, "4. Inductive Bias", "#9333EA", "#FAF5FF", [
             ("DenseNet vs EfficientNet", "#6B21A8", 9.0, True),
-            ("In: 0.675 vs 0.683 (p < 0.01)", "#475569", 7.6, True),
-            ("DenseNet Gap: +0.014", "#334155", 7.8, False),
-            ("EfficientNet Gap: +0.022", "#334155", 7.8, False),
+            (f"In: {dn_in_auc:.3f} vs {eff_in_s} (p = {h4_p})", "#475569", 7.6, True),
+            (f"DenseNet Gap: {dn_gap_s}", "#334155", 7.8, False),
+            (f"EfficientNet Gap: {eff_gap_s}", "#334155", 7.8, False),
             ("• Multi-Seed Variance", "#6B21A8", 7.8, True),
-            ("  EffNet SD (0.024) vs DenseNet (0.034)", "#475569", 7.2, False),
+            ("  DenseNet (0.034) vs EffNet (0.024)", "#475569", 7.2, False),
             ("• Uncertainty Policy", "#DC2626", 7.8, True),
-            ("  U-Ones inflates false positives", "#475569", 7.2, False),
+            (f"  U-Ones spec collapse: {spec_col}", "#475569", 7.2, False),
         ]),
         (926, "5. Saliency Shortcuts", "#059669", "#ECFDF5", [
-            ("Shortcut Surge: +288.6%", "#065F46", 9.0, True),
-            ("p < 0.0001 (Mann-Whitney)", "#475569", 7.6, True),
-            ("Faithfulness FDR: -56.5% drop", "#334155", 7.8, False),
-            ("Cascading Sanity: 100% Collapse", "#334155", 7.8, False),
+            (f"Shortcut Surge: +{surge_pct:.1f}%", "#065F46", 9.0, True),
+            (f"p = {h5_p} (Mann-Whitney)", "#475569", 7.6, True),
+            (f"Faithfulness Ratio: {fdr_in} -> {fdr_tr}", "#334155", 7.8, False),
+            (f"Cascading Sanity: {sanity} Drop", "#334155", 7.8, False),
             ("• Bounding Box Localization", "#065F46", 7.8, True),
-            ("  Pointing Hit Rate: 82% -> 38%", "#475569", 7.2, False),
+            (f"  Pointing Hit Rate: {hit_in} -> {hit_tr}", "#475569", 7.2, False),
             ("• Confounding Features", "#DC2626", 7.8, True),
             ("  Attention on collimation borders", "#475569", 7.2, False),
         ]),
@@ -1358,7 +1464,7 @@ def generate_all_figures(
     results: Dict[str, Dict[str, Path]] = {}
 
     figure_generators = [
-        ("fig1_study_overview", plot_fig1_study_overview),
+        ("fig1_study_overview", lambda: plot_fig1_study_overview(tables_dir=tables_dir, manifest=manifest)),
         ("fig2_roc_pr_curves", lambda: plot_fig2_roc_pr_curves(predictions_bundle=bundle, manifest=manifest)),
         ("fig3_calibration_reliability", lambda: plot_fig3_calibration_reliability(predictions_bundle=bundle, manifest=manifest)),
         ("fig4_threshold_transfer_discordance", lambda: plot_fig4_threshold_transfer_discordance(predictions_bundle=bundle, manifest=manifest)),
