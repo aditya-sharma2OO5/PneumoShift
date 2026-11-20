@@ -270,11 +270,21 @@ credentials.*
 Thumbs.db
 Desktop.ini
 
+# Scratch & Temporary Scripts
+scratch/
+
+# Provisional Results & Tables
+/results/tables/provisional_*/
+
 # Internal Forensic Audit Artifacts
 CHANGELOG_CLAIMS.md
 PROVENANCE_TABLE.csv
 VERIFY_REPORT.md
 scripts/verify_step2_analysis.py
 AUDIT_TRAINING.md
+INPUT_INVENTORY.md
+PIPELINE_CHECKS.md
+UPDATED_FINDINGS.md
+
 
 
