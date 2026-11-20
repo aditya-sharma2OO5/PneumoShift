@@ -1,5 +1,6 @@
 """Training callbacks for early stopping and checkpoint management."""
 
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 import subprocess
@@ -16,6 +17,15 @@ def get_git_hash() -> str:
         return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("ascii").strip()
     except Exception:
         return "unknown_git_hash"
+
+
+def save_atomic_checkpoint(state: Dict[str, Any], target_path: Path) -> None:
+    """Saves a PyTorch state dictionary to a temporary file, then atomically renames it."""
+    target_path = Path(target_path)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = target_path.parent / f".tmp_{target_path.name}"
+    torch.save(state, temp_path)
+    os.replace(temp_path, target_path)
 
 
 class EarlyStopping:
@@ -58,6 +68,7 @@ class ModelCheckpoint:
     Supports a primary monitor metric (default ``val_macro_auroc``) and an
     optional secondary monitor (e.g. ``val_pneumonia_auroc``) so that the best
     checkpoint for the headline finding is also preserved independently.
+    All checkpoints are written atomically via temporary files to prevent corrupt saves.
     """
 
     def __init__(
@@ -80,8 +91,9 @@ class ModelCheckpoint:
         epoch: int,
         metrics: Dict[str, float],
         config: Dict[str, Any],
+        extra_state: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        return {
+        state = {
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
@@ -89,6 +101,9 @@ class ModelCheckpoint:
             "config": config,
             "git_hash": get_git_hash(),
         }
+        if extra_state:
+            state.update(extra_state)
+        return state
 
     def save(
         self,
@@ -98,17 +113,18 @@ class ModelCheckpoint:
         metrics: Dict[str, float],
         config: Dict[str, Any],
         is_best: bool = False,
+        extra_state: Optional[Dict[str, Any]] = None,
     ) -> Path:
-        state = self._build_state(model, optimizer, epoch, metrics, config)
+        state = self._build_state(model, optimizer, epoch, metrics, config, extra_state=extra_state)
 
         latest_path = self.checkpoint_dir / "checkpoint_latest.pt"
-        torch.save(state, latest_path)
+        save_atomic_checkpoint(state, latest_path)
 
         saved_path = latest_path
 
         if is_best:
             best_path = self.checkpoint_dir / "checkpoint_best.pt"
-            torch.save(state, best_path)
+            save_atomic_checkpoint(state, best_path)
             logger.info(
                 "Saved new best checkpoint at epoch %d with %s: %.4f",
                 epoch,
@@ -123,7 +139,7 @@ class ModelCheckpoint:
             if sec_score > self.best_secondary_score:
                 self.best_secondary_score = sec_score
                 sec_path = self.checkpoint_dir / "checkpoint_best_pneumonia.pt"
-                torch.save(state, sec_path)
+                save_atomic_checkpoint(state, sec_path)
                 logger.info(
                     "Saved new best secondary checkpoint at epoch %d with %s: %.4f",
                     epoch,

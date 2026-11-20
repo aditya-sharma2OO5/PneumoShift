@@ -1,6 +1,8 @@
 """Training engine with mixed precision, gradient clipping, and two-stage fine-tuning."""
 
 from pathlib import Path
+import random
+import time
 from typing import Any, Dict, List, Optional
 import numpy as np
 import torch
@@ -9,7 +11,7 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 from tqdm import tqdm
 
 from pneumoshift.data.harmonize_labels import SHARED_CLASSES
-from pneumoshift.training.callbacks import EarlyStopping, ModelCheckpoint
+from pneumoshift.training.callbacks import EarlyStopping, ModelCheckpoint, save_atomic_checkpoint
 from pneumoshift.training.metrics_logger import EpochMetricsLogger
 from pneumoshift.utils.logging import get_logger
 
@@ -64,6 +66,8 @@ class Trainer:
 
         run_output_dir = self.config.get("train", {}).get("run_output_dir", "results/runs")
         self.metrics_logger = EpochMetricsLogger(output_dir=run_output_dir)
+        self.best_epoch: int = 1
+        self.stopped_due_to_timeout: bool = False
 
     def train_epoch(self, epoch: int) -> float:
         self.model.train()
@@ -200,15 +204,22 @@ class Trainer:
 
         return metrics
 
-    def fit(self, epochs: int) -> Dict[str, List[float]]:
-        logger.info("Starting training on device: %s for %d epochs.", self.device, epochs)
-        history: Dict[str, List[float]] = {
+    def fit(
+        self,
+        epochs: int,
+        start_epoch: int = 1,
+        max_hours: Optional[float] = None,
+        start_time: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        logger.info("Starting training on device: %s from epoch %d to %d.", self.device, start_epoch, epochs)
+        history: Dict[str, Any] = {
             "train_loss": [],
             "val_loss": [],
             "val_macro_auroc": [],
             "val_macro_auprc": [],
             "val_pneumonia_auroc": [],
             "val_pneumonia_auprc": [],
+            "best_epoch": self.best_epoch,
         }
 
         two_stage = self.config.get("train", {}).get("two_stage_finetune", False)
@@ -216,9 +227,22 @@ class Trainer:
         backbone_lr = float(self.config.get("train", {}).get("backbone_lr", 0.0))
 
         if two_stage and hasattr(self.model, "freeze_backbone"):
-            self.model.freeze_backbone()
+            if start_epoch <= freeze_epochs:
+                self.model.freeze_backbone()
 
-        for epoch in range(1, epochs + 1):
+        for epoch in range(start_epoch, epochs + 1):
+            if max_hours is not None and start_time is not None:
+                elapsed_hours = (time.time() - start_time) / 3600.0
+                if elapsed_hours >= max_hours:
+                    logger.warning(
+                        "Max hours limit reached before epoch %d (%.2f / %.2f hours). Exiting cleanly.",
+                        epoch,
+                        elapsed_hours,
+                        max_hours,
+                    )
+                    self.stopped_due_to_timeout = True
+                    break
+
             if two_stage and epoch == freeze_epochs + 1 and hasattr(self.model, "unfreeze_backbone"):
                 self.model.unfreeze_backbone()
                 # Restore backbone learning rate in the optimizer param group
@@ -246,20 +270,6 @@ class Trainer:
             history["val_pneumonia_auroc"].append(val_pneu)
             history["val_pneumonia_auprc"].append(val_metrics.get("val_pneumonia_auprc", 0.0))
 
-            logger.info(
-                "Epoch %02d/%02d | Train Loss: %.4f | Val Loss: %.4f | Macro AUROC: %.4f | Pneumonia AUROC: %.4f",
-                epoch,
-                epochs,
-                train_loss,
-                val_loss,
-                val_macro,
-                val_pneu,
-            )
-
-            # Log all metrics (train loss + full validation metrics) to CSV/JSON
-            epoch_row = {"train_loss": train_loss, **val_metrics}
-            self.metrics_logger.log(epoch=epoch, metrics=epoch_row)
-
             monitor_score = val_metrics.get(self.checkpoint_cb.monitor, val_macro)
 
             # Scheduler step
@@ -273,6 +283,35 @@ class Trainer:
             is_best = monitor_score > self.checkpoint_cb.best_score
             if is_best:
                 self.checkpoint_cb.best_score = monitor_score
+                self.best_epoch = epoch
+
+            logger.info(
+                "Epoch %02d/%02d | Train Loss: %.4f | Val Loss: %.4f | Macro AUROC: %.4f | Pneumonia AUROC: %.4f | Best: %s",
+                epoch,
+                epochs,
+                train_loss,
+                val_loss,
+                val_macro,
+                val_pneu,
+                "YES" if is_best else "NO",
+            )
+
+            # Log all metrics (train loss + full validation metrics + selected_as_best) to CSV/JSON
+            epoch_row = {"train_loss": train_loss, **val_metrics, "selected_as_best": is_best}
+            self.metrics_logger.log(epoch=epoch, metrics=epoch_row)
+
+            # Capture extra states for atomic resume support
+            extra_state = {
+                "scheduler_state_dict": self.lr_scheduler.state_dict() if self.lr_scheduler else None,
+                "scaler_state_dict": self.scaler.state_dict() if hasattr(self, "scaler") and self.scaler else None,
+                "best_epoch": self.best_epoch,
+                "best_score": self.checkpoint_cb.best_score,
+                "best_secondary_score": self.checkpoint_cb.best_secondary_score,
+                "rng_state_torch": torch.get_rng_state(),
+                "rng_state_cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+                "rng_state_numpy": np.random.get_state(),
+                "rng_state_python": random.getstate(),
+            }
 
             self.checkpoint_cb.save(
                 model=self.model,
@@ -281,12 +320,39 @@ class Trainer:
                 metrics=val_metrics,
                 config=self.config,
                 is_best=is_best,
+                extra_state=extra_state,
             )
+
+            # Atomically save last.pt for uninterrupted resume capability
+            last_path = self.checkpoint_cb.checkpoint_dir / "last.pt"
+            state = self.checkpoint_cb._build_state(
+                model=self.model,
+                optimizer=self.optimizer,
+                epoch=epoch,
+                metrics=val_metrics,
+                config=self.config,
+                extra_state=extra_state,
+            )
+            save_atomic_checkpoint(state, last_path)
+
+            if max_hours is not None and start_time is not None:
+                elapsed_hours = (time.time() - start_time) / 3600.0
+                if elapsed_hours >= max_hours:
+                    logger.warning(
+                        "Max hours limit reached after epoch %d (%.2f / %.2f hours). Exiting cleanly.",
+                        epoch,
+                        elapsed_hours,
+                        max_hours,
+                    )
+                    self.stopped_due_to_timeout = True
+                    break
 
             self.early_stopping(monitor_score)
             if self.early_stopping.should_stop:
                 logger.info("Stopping early at epoch %d.", epoch)
                 break
 
+        history["best_epoch"] = self.best_epoch
+        history["stopped_due_to_timeout"] = self.stopped_due_to_timeout
         return history
 
