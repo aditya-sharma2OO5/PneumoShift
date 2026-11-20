@@ -41,6 +41,14 @@ from pneumoshift.utils.logging import get_logger
 logger = get_logger("scripts.evaluate_cross_domain")
 
 
+def load_checkpoint_file(path: Path, device: torch.device) -> Dict[str, Any]:
+    """Safely loads PyTorch checkpoint with backward compatibility across PyTorch versions."""
+    try:
+        return torch.load(path, map_location=device, weights_only=False)
+    except TypeError:
+        return torch.load(path, map_location=device)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Unified Cross-Domain Evaluation Orchestrator (Phase 3)"
@@ -446,7 +454,7 @@ def main() -> None:
     model = build_model(architecture=arch, num_classes=num_classes, pretrained=False)
     ckpt_path = Path(args.checkpoint or paths["checkpoint_path"])
     if ckpt_path.is_file():
-        ckpt = torch.load(ckpt_path, map_location=device)
+        ckpt = load_checkpoint_file(ckpt_path, device)
         model.load_state_dict(ckpt["model_state_dict"])
         logger.info("Loaded model weights from checkpoint: %s (epoch %s)", ckpt_path, ckpt.get("epoch", "?"))
     else:
@@ -529,9 +537,23 @@ def main() -> None:
             "age": [45.0] * n_src_val,
         })
 
-    # Patient IDs
+    # Patient IDs and Image IDs
+    def _extract_image_ids(df_obj: pd.DataFrame) -> np.ndarray:
+        if "image_id" in df_obj.columns:
+            return df_obj["image_id"].astype(str).to_numpy()
+        elif "Image Index" in df_obj.columns:
+            return df_obj["Image Index"].astype(str).to_numpy()
+        elif "image_path" in df_obj.columns:
+            return df_obj["image_path"].apply(lambda p: Path(str(p)).name).astype(str).to_numpy()
+        elif "Path" in df_obj.columns:
+            return df_obj["Path"].apply(lambda p: Path(str(p)).name).astype(str).to_numpy()
+        return np.array([f"img_{i}" for i in range(len(df_obj))])
+
     tgt_patients = df_tgt_test["patient_id"].to_numpy() if "patient_id" in df_tgt_test.columns else np.arange(len(df_tgt_test))
     src_patients = df_src_val["patient_id"].to_numpy() if "patient_id" in df_src_val.columns else np.arange(len(df_src_val))
+    tgt_image_ids = _extract_image_ids(df_tgt_test)
+    src_image_ids = _extract_image_ids(df_src_val)
+    pneu_col_idx = np.int64(classes.index("Pneumonia") if "Pneumonia" in classes else 5)
 
     # Save raw prediction arrays (.npz) as the single source of truth for figures
     pred_dir = Path(args.predictions_dir)
@@ -544,7 +566,9 @@ def main() -> None:
         y_true=tgt_targets,
         y_score=tgt_probs,
         y_logits=tgt_logits,
+        image_ids=tgt_image_ids,
         patient_ids=tgt_patients,
+        pneumonia_col_idx=pneu_col_idx,
         label_cols=np.array(classes),
         features=tgt_feats,
     )
@@ -560,7 +584,9 @@ def main() -> None:
             y_true=src_targets,
             y_score=src_probs,
             y_logits=src_logits,
+            image_ids=src_image_ids,
             patient_ids=src_patients,
+            pneumonia_col_idx=pneu_col_idx,
             label_cols=np.array(classes),
             features=src_feats,
         )
@@ -571,13 +597,16 @@ def main() -> None:
 
     if cal_targets is not None and loader_tgt_cal is not None:
         cal_patients = df_tgt_cal["patient_id"].to_numpy() if "patient_id" in df_tgt_cal.columns else np.arange(len(df_tgt_cal))
+        cal_image_ids = _extract_image_ids(df_tgt_cal)
         cal_pred_path = pred_dir / f"predictions_target_cal_{arch}_{eval_seed}.npz"
         np.savez_compressed(
             cal_pred_path,
             y_true=cal_targets,
             y_score=cal_probs,
             y_logits=cal_logits,
+            image_ids=cal_image_ids,
             patient_ids=cal_patients,
+            pneumonia_col_idx=pneu_col_idx,
             label_cols=np.array(classes),
         )
         logger.info("Saved raw target cal predictions (.npz) to %s", cal_pred_path)
