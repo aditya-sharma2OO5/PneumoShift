@@ -279,6 +279,10 @@ class Trainer:
                 else:
                     self.lr_scheduler.step()
 
+            # Current learning rate
+            current_lr = self.optimizer.param_groups[0]["lr"] if self.optimizer.param_groups else None
+            history.setdefault("learning_rate", []).append(current_lr)
+
             # Checkpoint & Early stopping
             is_best = monitor_score > self.checkpoint_cb.best_score
             if is_best:
@@ -286,18 +290,24 @@ class Trainer:
                 self.best_epoch = epoch
 
             logger.info(
-                "Epoch %02d/%02d | Train Loss: %.4f | Val Loss: %.4f | Macro AUROC: %.4f | Pneumonia AUROC: %.4f | Best: %s",
+                "Epoch %02d/%02d | Train Loss: %.4f | Val Loss: %.4f | Macro AUROC: %.4f | Pneumonia AUROC: %.4f | LR: %.2e | Best: %s",
                 epoch,
                 epochs,
                 train_loss,
                 val_loss,
                 val_macro,
                 val_pneu,
+                current_lr if current_lr is not None else 0.0,
                 "YES" if is_best else "NO",
             )
 
-            # Log all metrics (train loss + full validation metrics + selected_as_best) to CSV/JSON
-            epoch_row = {"train_loss": train_loss, **val_metrics, "selected_as_best": is_best}
+            # Log all metrics (train loss + learning_rate + full validation metrics + selected_as_best) to CSV/JSON
+            epoch_row = {
+                "train_loss": train_loss,
+                "learning_rate": current_lr,
+                **val_metrics,
+                "selected_as_best": is_best,
+            }
             self.metrics_logger.log(epoch=epoch, metrics=epoch_row)
 
             # Capture extra states for atomic resume support
