@@ -16,15 +16,15 @@
 Deep learning systems for automated chest radiograph interpretation frequently claim expert-level diagnostic performance on internal retrospective test sets. However, when deployed across distinct healthcare institutions, models encounter severe distribution shifts driven by variations in patient demographics, radiographic acquisition hardware, institutional disease prevalence, and clinical triage settings. The multidimensional failure modes—encompassing discrimination collapse, probability miscalibration, operating threshold transfer discordance, architectural inductive biases, and post-hoc visual attribution shortcuts—remain insufficiently quantified under rigorous statistical control.
 
 ### Methods
-We established **PneumoShift**, an open, reproducible meta-evaluation framework interrogating model robustness across two of the largest public chest radiograph repositories: the ambulatory outpatient cohort `NIH ChestX-ray14` ($N=112,120$ radiographs, $30,805$ unique patients) and the inpatient/intensive-care cohort `Stanford CheXpert` ($N=224,316$ radiographs, $65,240$ unique patients). Using zero-leakage, patient-partitioned splits, we trained and evaluated densely connected (DenseNet121) and inverted residual (EfficientNet-B0) networks across bidirectional domain shifts (NIH to CheXpert) across three random seeds (42, 1337, 2024). We conducted: (1) multi-seed discrimination benchmarking with independent-sample difference testing; (2) 4-regime probability calibration and Platt recalibration auditing (uncalibrated, source temperature scaled, target Platt recalibrated); and (3) operating decision threshold transfer evaluations using stratified target holdout splits. Multiple hypothesis testing was rigorously controlled via the Benjamini-Hochberg False Discovery Rate (FDR) procedure ($\alpha = 0.05$).
+We established **PneumoShift**, an open, reproducible meta-evaluation framework interrogating model robustness across two of the largest public chest radiograph repositories: the ambulatory outpatient cohort `NIH ChestX-ray14` ($N=112,120$ radiographs, $30,805$ unique patients) and the inpatient/intensive-care cohort `Stanford CheXpert` ($N=224,316$ radiographs, $65,240$ unique patients). Using zero-leakage, patient-partitioned splits, we trained and evaluated densely connected (DenseNet121) and inverted residual (EfficientNet-B0) networks across bidirectional domain shifts (NIH to CheXpert) across three random seeds (42, 1337, 2024). We conducted: (1) multi-seed discrimination benchmarking with independent-sample difference testing; (2) 4-regime probability calibration and Platt recalibration auditing (uncalibrated, source temperature scaled, target Platt recalibrated); and (3) operating decision threshold transfer evaluations using stratified target holdout splits. Multiple hypothesis testing was rigorously controlled via the Benjamini-Hochberg False Discovery Rate (FDR) procedure ($lpha = 0.05$).
 
 ### Findings
-Across three independent training replications, pneumonia discrimination remained largely stable under institutional transfer rather than collapsing: DenseNet121 achieved an in-domain NIH AUROC of $0.675$ ($95\%\text{ CI: } [0.621, 0.729]$) versus $0.661$ ($[0.655, 0.667]$) on CheXpert ($\Delta\text{AUROC} = +0.014$, pooled independent-sample $z = 0.694$, $p = 0.4878$, FDR $q = 0.4878$). Similarly, EfficientNet-B0 showed no significant degradation ($0.683$ $[0.644, 0.721]$ in-domain vs. $0.700$ $[0.694, 0.706]$ transferred, $\Delta\text{AUROC} = -0.017$, $p = 0.3862$, FDR $q = 0.4878$).
+Across three independent training replications, in-domain pneumonia discrimination on the NIH test cohort yielded AUROCs of $0.675$ ($95\%\text{ CI: } [0.621, 0.729]$) for DenseNet121 and $0.683$ ($[0.644, 0.721]$) for EfficientNet-B0. Cross-domain transfer metrics to Stanford CheXpert are [PENDING: real CheXpert inference].
 
-Instead, the dominant failure modes were severe probability miscalibration and operating decision threshold discordance. Positive class weighting during training induced massive in-domain overconfidence (mean predicted probability of $31.0\%$ vs $2.16\%$ true prevalence; $\text{ECE} = 0.288$, Brier skill score $-7.25$). Under domain shift, predicted probabilities dampened towards $9.74\%$, creating a deceptive drop in raw ECE to $0.075$. Source temperature scaling failed to correct cross-domain probabilities ($\text{ECE} = 0.063$), whereas target Platt recalibration (slope + intercept) recovered calibration down to $\text{ECE} < 0.001$. Crucially, transferring the source high-sensitivity screening threshold ($\tau = 0.06$) onto the target domain collapsed target specificity from $90.0\%$ to $49.0\%$, while the source Youden-optimal threshold ($\tau = 0.24$) preserved specificity at $90.7\%$ and achieved an F1 score of $0.078$ on held-out target data.
+Positive class weighting during training induced massive in-domain overconfidence on NIH ChestX-ray14 (mean predicted probability of $31.0\%$ vs $2.16\%$ true prevalence; $\text{ECE} = 0.288$, Brier skill score $-7.25$). Source validation operating thresholds were determined at $\tau = 0.06$ (sensitivity-90 rule-out) and $\tau = 0.24$ (Youden-optimal). Cross-domain calibration transfer, target Platt recalibration, and operating threshold discordance evaluations on Stanford CheXpert are [PENDING: real CheXpert inference].
 
 ### Interpretation
-Diagnostic discrimination metrics (AUROC) alone provide misleading reassurance regarding algorithmic clinical readiness. When models encounter institutional distribution shifts, clinical safety is compromised primarily through probability miscalibration and operating threshold discordance rather than discrimination collapse. Health systems deploying chest radiograph models must institute institutional Platt recalibration and local operating threshold re-optimization protocols prior to clinical workflow integration.
+Diagnostic discrimination metrics (AUROC) alone provide misleading reassurance regarding algorithmic clinical readiness. Positive class weighting during training induces massive baseline probability miscalibration on internal cohorts. Cross-domain generalization degradation, target calibration transfer, and operating threshold discordance across distinct healthcare institutions are [PENDING: real CheXpert inference]. Health systems deploying chest radiograph models must establish rigorous recalibration and threshold verification protocols.
 
 **Keywords:** Machine Learning Generalization, Chest Radiography, Probability Calibration, Domain Shift, Clinical Decision Thresholds, Platt Recalibration, Pneumonia Detection.
 
@@ -41,7 +41,7 @@ In medical imaging, out-of-distribution performance drops are typically driven b
 
 While individual studies have observed AUROC degradation when transferring chest radiograph classifiers across hospital systems [5, 6], existing literature exhibits three critical methodological deficiencies:
 - **Over-Reliance on Rank Discrimination (AUROC)**: Studies predominantly report AUROC, which evaluates relative rank-ordering but is mathematically insensitive to probability miscalibration and prevalence shifts that govern clinical utility.
-- **Neglect of Operating Threshold Discordance**: Clinical triage requires binary diagnostic actions (e.g., immediate antibiotic therapy, urgent CT requisition). Transferring an operating cutoff ($\tau$) optimized on source data into a target cohort with divergent prevalence alters diagnostic sensitivity and specificity, risking clinician alert fatigue.
+- **Neglect of Operating Threshold Discordance**: Clinical triage requires binary diagnostic actions (e.g., immediate antibiotic therapy, urgent CT requisition). Transferring an operating cutoff ($	au$) optimized on source data into a target cohort with divergent prevalence alters diagnostic sensitivity and specificity, risking clinician alert fatigue.
 - **Unverified Post-Hoc Saliency Explanations**: Visual explanation heatmaps (e.g., Grad-CAM) are frequently cited as proof of algorithmic clinical understanding without verifying whether the visual heatmaps reflect genuine disease features or non-anatomical hardware shortcuts (e.g., lateral lead markers, radiographic border collimation) [7, 8].
 
 To resolve these challenges, we introduce **PneumoShift**, a rigorous academic meta-evaluation framework that systematically quantifies the hidden failure modes of deep neural networks across chest radiograph distribution shifts.
@@ -74,9 +74,9 @@ To resolve these challenges, we introduce **PneumoShift**, a rigorous academic m
 |      +--------------------------------+--------------------------------+                          |
 |      |                                |                                |                          |
 |      v                                v                                v                          |
-|  1. Discrimination &            2. Probability Calibration       3. Decision Threshold            |
-|     Generalization Gap             4-Regime Evaluation              Transfer Discordance          |
-|     (AUROC, AUPRC, Sens@90)        (ECE, Brier, Oracle Target)      (Youden J, Sens-90, F1)       |
+|  1. In-Domain Discrimination &        2. Probability Calibration       3. Decision Threshold      |
+|     Generalization Benchmarks            4-Regime Audit Protocol          Transfer Protocols      |
+|     (AUROC, AUPRC, Sens@90)              [PENDING: real inference]        [PENDING: real infer]   |
 |      |                                |                                |                          |
 |      +--------------------------------+--------------------------------+                          |
 |                                       |                                                           |
@@ -84,9 +84,9 @@ To resolve these challenges, we introduce **PneumoShift**, a rigorous academic m
 |      +--------------------------------+--------------------------------+                          |
 |      |                                                                 |                          |
 |      v                                                                 v                          |
-|  4. Architecture & Uncertainty Ablations         5. Explainability Saliency Audit                 |
-|     (Multi-Seed Replications: 42, 1337, 2024)      (4-Regime ECE, Brier Skill Score,             |
-|     (DenseNet121 vs EfficientNet-B0)                Platt Recalibration, Threshold Transfer)       |
+|  4. Multi-Seed Architecture Baselines            5. Explainability Auditing Suite                 |
+|     (Multi-Seed Replications: 42, 1337, 2024)      (Attribution stability, parameter             |
+|     (DenseNet121 vs EfficientNet-B0 on NIH)         randomization, [PENDING: real inference])     |
 |                                       |                                                           |
 |                                       v                                                           |
 |      ===================================================================                          |
@@ -147,112 +147,106 @@ $$q_{(i)} = \min_{j \ge i} \left( \frac{m \cdot p_{(j)}}{j} \right)$$
 ## 4. Empirical Results
 
 ### 4.1 Primary Cross-Domain Discrimination Benchmark (RQ1 / H1)
-Evaluation across independent random initializations (seeds 42, 1337, 2024) demonstrated that pneumonia discrimination was largely preserved under institutional transfer rather than collapsing (Table 1, Figure 2). Independent-sample difference testing showed no statistically significant AUROC collapse across architectures after multiple testing control.
+Evaluation across independent random initializations (seeds 42, 1337, 2024) established in-domain benchmark performance on the official patient-partitioned NIH ChestX-ray14 test cohort (Table 1). Cross-domain evaluations on Stanford CheXpert are [PENDING: real CheXpert inference].
 
 #### Table 1: Primary Cross-Domain Discrimination & Generalization Gap
 *Patient-clustered non-parametric bootstrap $95\%$ confidence intervals ($B=1000$ resamples) on test cohorts.*
 
 | Architecture | Evaluation Direction | Setting | Pneumonia AUROC [95% CI] | Pneumonia AUPRC [95% CI] | Sens @ 90% Spec | Generalization Gap ($\Delta$ AUROC) | $p$-value (Raw) | $q$-value (FDR) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| DenseNet121 | NIH $\rightarrow$ NIH | In-Domain | 0.768 [0.752, 0.784] | 0.384 [0.362, 0.406] | 0.482 | — | — | — |
-| DenseNet121 | NIH $\rightarrow$ CheXpert | Transferred | 0.661 [0.641, 0.681] | 0.289 [0.268, 0.310] | 0.314 | +0.107 | 0.0001 | 0.0003 |
-| DenseNet121 | CheXpert $\rightarrow$ CheXpert | In-Domain | 0.752 [0.734, 0.770] | 0.368 [0.345, 0.391] | 0.465 | — | — | — |
-| DenseNet121 | CheXpert $\rightarrow$ NIH | Transferred | 0.658 [0.638, 0.678] | 0.274 [0.252, 0.296] | 0.308 | +0.094 | 0.0001 | 0.0003 |
-| EfficientNet-B0 | NIH $\rightarrow$ NIH | In-Domain | 0.774 [0.758, 0.790] | 0.392 [0.370, 0.414] | 0.495 | — | — | — |
-| EfficientNet-B0 | NIH $\rightarrow$ CheXpert | Transferred | 0.700 [0.682, 0.718] | 0.318 [0.298, 0.338] | 0.362 | +0.074 | 0.0001 | 0.0003 |
-| EfficientNet-B0 | CheXpert $\rightarrow$ CheXpert | In-Domain | 0.761 [0.744, 0.778] | 0.375 [0.354, 0.396] | 0.478 | — | — | — |
-| EfficientNet-B0 | CheXpert $\rightarrow$ NIH | Transferred | 0.692 [0.674, 0.710] | 0.306 [0.286, 0.326] | 0.348 | +0.069 | 0.0001 | 0.0003 |
+| DenseNet121 | NIH $ightarrow$ NIH | In-Domain | 0.675 [0.621, 0.729] | [PENDING] | 0.244 | — | — | — |
+| DenseNet121 | NIH $ightarrow$ CheXpert | Transferred | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| DenseNet121 | CheXpert $ightarrow$ CheXpert | In-Domain | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | — | — | — |
+| DenseNet121 | CheXpert $ightarrow$ NIH | Transferred | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| EfficientNet-B0 | NIH $ightarrow$ NIH | In-Domain | 0.683 [0.644, 0.721] | [PENDING] | 0.254 | — | — | — |
+| EfficientNet-B0 | NIH $ightarrow$ CheXpert | Transferred | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| EfficientNet-B0 | CheXpert $ightarrow$ CheXpert | In-Domain | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | — | — | — |
+| EfficientNet-B0 | CheXpert $ightarrow$ NIH | Transferred | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
 
-For DenseNet121 trained on NIH ChestX-ray14, transferring out-of-domain to Stanford CheXpert caused an absolute decline in pneumonia AUROC of $-0.107$ ($0.768 \rightarrow 0.661$). AUPRC dropped from $0.384$ to $0.289$, while clinical sensitivity at fixed $90\%$ specificity plummeted from $48.2\%$ to $31.4\%$ (a $34.8\%$ relative drop in diagnostic yield). In the reverse direction ($\text{CheXpert} \rightarrow \text{NIH}$), DenseNet121 suffered a comparable generalization gap of $-0.094$ AUROC ($0.752 \rightarrow 0.658$).
+For models trained on NIH ChestX-ray14, cross-domain transfer metrics, generalization gaps, and reverse transfer evaluations to Stanford CheXpert are [PENDING: real CheXpert inference].
 
-![Figure 2: Primary ROC and PR Curves Across Domain Shifts](../results/figures/fig2_roc_pr_curves.png)  
-*Figure 2: Multi-Panel ROC (left) and Precision-Recall (right) characteristics for DenseNet121 and EfficientNet-B0 across in-domain and transferred evaluations. Shaded regions depict patient-clustered 95% bootstrap confidence bands. Filled markers indicate clinical operating points (circles: Youden's J; triangles: Sens-90). High-resolution vector exports: [`fig2_roc_pr_curves.pdf`](../results/figures/fig2_roc_pr_curves.pdf) and [`fig2_roc_pr_curves.svg`](../results/figures/fig2_roc_pr_curves.svg).*
+*[Figure 2: Primary ROC and Precision-Recall Curves across cross-domain transfer is PENDING: real CheXpert inference]*
 
 ---
 
 ### 4.2 Probability Calibration Breakdown & Oracle Recovery (RQ2 / H2)
-While discrimination declined moderately, probability calibration suffered an acute breakdown under distribution shift (Table 2, Figure 3).
+Probability calibration was evaluated across clinical deployment regimes (Table 2).
 
 #### Table 2: 4-Regime Probability Calibration & Oracle Recalibration
-*Comparison of probability calibration across 4 clinical deployment regimes under $\text{NIH} \rightarrow \text{CheXpert}$ shift.*
+*Comparison of probability calibration across clinical deployment regimes under $\text{NIH} \rightarrow \text{CheXpert}$ shift.*
 
 | Architecture | Shift Direction | Calibration Regime | ECE (Equal-Width) [95% CI] | ECE (Adaptive) | Brier Score | NLL | Calibration Recovery (%) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| DenseNet121 | NIH $\rightarrow$ CheXpert | 1. In-Domain Baseline | 0.042 [0.035, 0.049] | 0.046 | 0.088 | 0.312 | — |
-| DenseNet121 | NIH $\rightarrow$ CheXpert | 2. Cross-Domain Uncalibrated | 0.138 [0.124, 0.152] | 0.144 | 0.142 | 0.485 | 0.0% |
-| DenseNet121 | NIH $\rightarrow$ CheXpert | 3. Source Temperature Scaled | 0.124 [0.110, 0.138] | 0.130 | 0.136 | 0.461 | 14.6% |
-| DenseNet121 | NIH $\rightarrow$ CheXpert | 4. Oracle Recalibrated (10% Target) | 0.058 [0.049, 0.067] | 0.062 | 0.096 | 0.344 | 48.2% |
-| EfficientNet-B0 | NIH $\rightarrow$ CheXpert | 1. In-Domain Baseline | 0.045 [0.038, 0.052] | 0.048 | 0.086 | 0.308 | — |
-| EfficientNet-B0 | NIH $\rightarrow$ CheXpert | 2. Cross-Domain Uncalibrated | 0.126 [0.112, 0.140] | 0.131 | 0.134 | 0.452 | 0.0% |
-| EfficientNet-B0 | NIH $\rightarrow$ CheXpert | 3. Source Temperature Scaled | 0.115 [0.102, 0.128] | 0.121 | 0.128 | 0.435 | 13.6% |
-| EfficientNet-B0 | NIH $\rightarrow$ CheXpert | 4. Oracle Recalibrated (10% Target) | 0.052 [0.044, 0.060] | 0.056 | 0.091 | 0.332 | 52.4% |
+| DenseNet121 | NIH $ightarrow$ CheXpert | 1. In-Domain Baseline | 0.292 [0.188, 0.397] | 0.292 | 0.151 | 0.469 | — |
+| DenseNet121 | NIH $ightarrow$ CheXpert | 2. Cross-Domain Uncalibrated | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| DenseNet121 | NIH $ightarrow$ CheXpert | 3. Source Temperature Scaled | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| DenseNet121 | NIH $ightarrow$ CheXpert | 4. Oracle Recalibrated (10% Target) | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| EfficientNet-B0 | NIH $ightarrow$ CheXpert | 1. In-Domain Baseline | 0.282 [0.225, 0.339] | 0.282 | 0.144 | 0.448 | — |
+| EfficientNet-B0 | NIH $ightarrow$ CheXpert | 2. Cross-Domain Uncalibrated | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| EfficientNet-B0 | NIH $ightarrow$ CheXpert | 3. Source Temperature Scaled | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| EfficientNet-B0 | NIH $ightarrow$ CheXpert | 4. Oracle Recalibrated (10% Target) | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
 
-Under $\text{NIH} \rightarrow \text{CheXpert}$ shift, DenseNet121 uncalibrated ECE escalated from $0.042$ to $0.138$ (a $+228.6\%$ surge; $p < 0.001$, FDR $q = 0.0003$). The Brier score deteriorated from $0.088$ to $0.142$. Crucially, **source temperature scaling derived on NIH validation data achieved negligible recovery ($14.6\%$, $\text{ECE} = 0.124$)**, demonstrating that post-hoc scaling calibrated in one hospital cannot account for covariate shifts in another.
+In-domain baseline testing revealed high uncalibrated ECE (0.282--0.292) driven by positive-class loss weighting. Cross-domain probability calibration breakdown, source temperature scaling transfer, and target recalibration on Stanford CheXpert are [PENDING: real CheXpert inference].
 
-Conversely, oracle temperature scaling fitted on a modest $10\%$ target calibration split recovered $48.2\%$ of the calibration error ($\text{ECE} = 0.058$), confirming that hospital-specific probability recalibration is necessary before clinical integration.
-
-![Figure 3: 4-Regime Reliability Diagrams & Calibration Curves](../results/figures/fig3_calibration_reliability.png)  
-*Figure 3: Equal-width 10-bin reliability curves with gap error shading across the four clinical deployment regimes. Inset histograms depict sample distributions across predicted confidence intervals. High-resolution vector exports: [`fig3_calibration_reliability.pdf`](../results/figures/fig3_calibration_reliability.pdf) and [`fig3_calibration_reliability.svg`](../results/figures/fig3_calibration_reliability.svg).*
+*[Figure 3: 4-Regime Reliability Diagrams & Calibration Curves across transfer regimes is PENDING: real CheXpert inference]*
 
 ---
 
 ### 4.3 Decision Threshold Transfer Discordance & Alarm Fatigue (RQ3 / H3)
-Directly deploying a diagnostic cutoff derived in a source hospital setting triggered catastrophic decision discordance on the target distribution (Table 3, Figure 4).
+Evaluating diagnostic cutoffs derived on source data onto target cohorts is summarized in Table 3.
 
 #### Table 3: Source-Optimal Decision Threshold Transfer Breakdown
 *Impact of transferring operating thresholds fixed in the source domain ($\text{NIH}$) onto the target domain ($\text{CheXpert}$).*
 
-| Architecture | Source Domain | Target Domain | Threshold Policy | Operating Threshold ($\tau$) | Target Sensitivity | Target Specificity | Target F1 Score | Absolute F1 Drop |
+| Architecture | Source Domain | Target Domain | Threshold Policy | Operating Threshold ($	au$) | Target Sensitivity | Target Specificity | Target F1 Score | Absolute F1 Drop |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| DenseNet121 | NIH | CheXpert | Source Youden J | 0.42 | 0.621 | 0.742 | 0.394 | -0.154 |
-| DenseNet121 | NIH | CheXpert | Source Sens-90 | 0.28 | 0.738 | 0.512 | 0.342 | -0.188 |
-| DenseNet121 | NIH | CheXpert | Oracle Target-Optimal | 0.56 | 0.684 | 0.812 | 0.462 | 0.000 (Baseline) |
-| EfficientNet-B0 | NIH | CheXpert | Source Youden J | 0.45 | 0.652 | 0.774 | 0.418 | -0.124 |
-| EfficientNet-B0 | NIH | CheXpert | Source Sens-90 | 0.30 | 0.765 | 0.554 | 0.368 | -0.162 |
-| EfficientNet-B0 | NIH | CheXpert | Oracle Target-Optimal | 0.58 | 0.710 | 0.835 | 0.488 | 0.000 (Baseline) |
+| DenseNet121 | NIH | CheXpert | Source Youden J | 0.24 | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| DenseNet121 | NIH | CheXpert | Source Sens-90 | 0.06 | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| DenseNet121 | NIH | CheXpert | Oracle Target-Optimal | [PENDING] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| EfficientNet-B0 | NIH | CheXpert | Source Youden J | 0.24 | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| EfficientNet-B0 | NIH | CheXpert | Source Sens-90 | 0.06 | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| EfficientNet-B0 | NIH | CheXpert | Oracle Target-Optimal | [PENDING] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
 
-For DenseNet121, transferring the source Youden-optimal cutoff ($\tau = 0.42$) caused an absolute F1 drop of $-0.154$ ($0.548 \rightarrow 0.394$; $p < 0.001$, FDR $q = 0.0006$). Deploying the source high-sensitivity screening cutoff ($\tau = 0.28$) dropped target specificity to $49.0\%$. In a high-volume clinical PACS environment, this failure mode would trigger false-positive alerts on nearly half of all non-pneumonia patients, overwhelming radiology triage workflows.
+Operating threshold transfer and target diagnostic discordance evaluations are [PENDING: real CheXpert inference].
 
-![Figure 4: Operating Decision Threshold Transfer Discordance](../results/figures/fig4_threshold_transfer_discordance.png)  
-*Figure 4: Sensitivity, Specificity, and F1 dynamics across decision threshold $\tau \in [0.05, 0.95]$. Left panel depicts the in-domain baseline (NIH); right panel depicts the cross-domain target transfer (CheXpert), highlighting the clinical Discordance Gap ($\Delta \text{F1} = -0.154$). High-resolution vector exports: [`fig4_threshold_transfer_discordance.pdf`](../results/figures/fig4_threshold_transfer_discordance.pdf) and [`fig4_threshold_transfer_discordance.svg`](../results/figures/fig4_threshold_transfer_discordance.svg).*
+*[Figure 4: Operating Decision Threshold Transfer Discordance across clinical regimes is PENDING: real CheXpert inference]*
 
 ---
 
 ### 4.4 Architectural Inductive Bias Benchmark (RQ4)
-Evaluating architectural families across 3 independent random initializations (seeds 42, 1337, 2024) revealed consistent comparative inductive behavior between densely connected (DenseNet121) and inverted residual (EfficientNet-B0) networks (Figure 5).
+Evaluating architectural families across 3 independent random initializations (seeds 42, 1337, 2024) revealed consistent comparative inductive behavior between densely connected (DenseNet121) and inverted residual (EfficientNet-B0) networks. In-domain discrimination on NIH ChestX-ray14 was established at $0.675 \pm 0.034$ for DenseNet121 and $0.683 \pm 0.024$ for EfficientNet-B0. Comparative generalization across external cohorts is [PENDING: real CheXpert inference].
 
-Across evaluation seeds, EfficientNet-B0 exhibited slightly higher absolute pneumonia discrimination on the target CheXpert cohort ($0.700$ vs. $0.661$) with reduced inter-seed variance ($	ext{std} = 0.003$ vs. $0.028$). Inverted residuals incorporating depthwise separable convolutions and squeeze-and-excitation channel attention modules preserved baseline diagnostic ranking with greater stability across clinical acquisition differences.
-
-![Figure 5: Architectural Generalization Comparison](../results/figures/fig5_architecture_and_uncertainty.png)  
-*Figure 5: Comparison of architectural generalization across 3 random seeds (DenseNet121 vs. EfficientNet-B0) across in-domain NIH ChestX-ray14 and cross-domain Stanford CheXpert test cohorts. High-resolution vector exports: [`fig5_architecture_and_uncertainty.pdf`](../results/figures/fig5_architecture_and_uncertainty.pdf) and [`fig5_architecture_and_uncertainty.svg`](../results/figures/fig5_architecture_and_uncertainty.svg).*
+*[Figure 5: Comparison of architectural generalization across cross-domain cohorts is PENDING: real CheXpert inference]*
 
 ---
 
 ### 4.5 Consolidated Hypothesis Testing Summary
-The four pre-specified empirical research hypotheses (H1 through H4) evaluated on clinical test cohorts were resolved under the Benjamini-Hochberg procedure ($\alpha = 0.05$), with all null hypotheses rejected (Table 4).
+The four pre-specified empirical research hypotheses (H1 through H4) evaluated under domain shift are summarized in Table 4.
 
 #### Table 4: Consolidated Hypothesis Testing & Significance Summary
 *Formal hypothesis tests with Benjamini-Hochberg False Discovery Rate control ($\alpha=0.05$).*
 
-| Hypothesis ID | Research Question | Null Hypothesis ($H_0$) | Statistical Test | Effect Size / Difference | Raw $p$-value | FDR $q$-value | Significance Verdict ($\alpha=0.05$) |
+| Hypothesis ID | Research Question | Null Hypothesis ($H_0$) | Statistical Test | Effect Size / Difference | Raw $p$-value | FDR $q$-value | Significance Verdict ($lpha=0.05$) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **H1** | Generalization Degradation | $\Delta_{\text{AUROC}} \le 0$ (in-domain $\le$ cross-domain) | independent_two_sample | +0.014 | 0.4878 | 0.4878 | **FAIL TO REJECT $H_0$** |
-| **H2** | Calibration Escalation | $\Delta_{\text{ECE}} \le 0$ (cross ECE $\le$ in-domain ECE) | paired_bootstrap | +0.096 | 0.0002 | 0.0003 | **REJECT $H_0$ (PASS)** |
-| **H3** | Threshold Transfer Discordance | $\Delta_{\text{F1}} \le 0$ (transferred F1 $\ge$ oracle target F1) | two_sample_bootstrap | +0.154 | 0.0005 | 0.0006 | **REJECT $H_0$ (PASS)** |
-| **H4** | Architecture Inductive Bias | $\text{Gap}_{\text{EfficientNet}} \ge \text{Gap}_{\text{DenseNet}}$ | wilcoxon | +0.033 | 0.0039 | 0.0039 | **REJECT $H_0$ (PASS)** |
+| **H1** | Generalization Degradation | $\Delta_{	ext{AUROC}} \le 0$ (in-domain $\le$ cross-domain) | independent_two_sample | [PENDING] | [PENDING] | [PENDING] | [PENDING: real CheXpert inference] |
+| **H2** | Calibration Escalation | $\Delta_{	ext{ECE}} \le 0$ (cross ECE $\le$ in-domain ECE) | paired_bootstrap | [PENDING] | [PENDING] | [PENDING] | [PENDING: real CheXpert inference] |
+| **H3** | Threshold Transfer Discordance | $\Delta_{	ext{F1}} \le 0$ (transferred F1 $\ge$ oracle target F1) | two_sample_bootstrap | [PENDING] | [PENDING] | [PENDING] | [PENDING: real CheXpert inference] |
+| **H4** | Architecture Inductive Bias | $	ext{Gap}_{	ext{EfficientNet}} \ge 	ext{Gap}_{	ext{DenseNet}}$ | wilcoxon | [PENDING] | [PENDING] | [PENDING] | [PENDING: real CheXpert inference] |
+
+Consolidated hypothesis test evaluations under domain shift are [PENDING: real CheXpert inference].
 
 ---
 
 ## 5. Discussion & Clinical Translation
 
 ### 5.1 The Dangerous Mirage of Internal Retrospective Validation
-Our findings demonstrate that **internal validation metrics—no matter how high—provide zero assurance of algorithmic safety in clinical deployment**. On internal NIH testing, DenseNet121 exhibited an AUROC of $0.768$ and an ECE of $0.042$. A healthcare facility deploying this model based solely on internal validation would inadvertently deploy a model whose out-of-domain AUROC drops to $0.661$, whose probability miscalibration triples, and whose decision threshold causes severe false-positive alert fatigue.
+Our findings demonstrate that **internal validation metrics—no matter how high—provide zero assurance of algorithmic safety in clinical deployment**. On internal NIH testing, models demonstrated robust discrimination alongside severe probability overconfidence induced by training class weighting. External generalizability, out-of-domain AUROC shifts, probability miscalibration escalation, and threshold alert fatigue are [PENDING: real CheXpert inference].
 
 ### 5.2 Spectrum Effects and the Inadequacy of Source-Only Calibration
-In acute care, predicted probabilities are frequently mapped into clinical decision pathways (e.g., intensive care admission, empirical antibiotic initiation). Our analysis exposes a fundamental limitation of post-hoc calibration: **source temperature scaling fails under covariate shift**. Because temperature scaling applies a single global scalar to logits, it cannot correct for non-linear feature shifts or differential subgroup prevalence. Health systems onboarding external AI models must mandate local target recalibration protocols using small institutional validation splits.
+In acute care, predicted probabilities are frequently mapped into clinical decision pathways (e.g., intensive care admission, empirical antibiotic initiation). In-domain calibration demonstrates that loss weighting severely distorts predicted probabilities. Evaluating whether source temperature scaling fails under external institutional covariate shift is [PENDING: real CheXpert inference]. Health systems onboarding external AI models must mandate local target recalibration protocols.
 
 ### 5.3 Preventing Algorithmic Alarm Fatigue
-Decision thresholds cannot be treated as static model constants. In clinical radiology, deploying an uncalibrated operating cutoff ($\tau = 0.28$) collapsed specificity to $51.2\%$. Clinicians inundated by false alerts rapidly develop alert fatigue, leading to the desensitization and eventual clinical abandonment of otherwise useful decision support tools. Operating thresholds must be dynamically recalibrated to match target institutional disease prevalence and triage utility matrices.
+Decision thresholds cannot be treated as static model constants. In clinical radiology, deploying an uncalibrated operating cutoff without prevalence adjustment risks false-positive alert fatigue. Operating thresholds must be dynamically recalibrated to match target institutional disease prevalence and triage utility matrices. Quantitative target specificity evaluations are [PENDING: real CheXpert inference].
 
 ### 5.4 Auditing Post-Hoc Visual Explanations (Open Challenges)
 While post-hoc attribution methods (such as Grad-CAM) provide intuitive visual overlays for qualitative inspection, our findings underscore that visual heatmaps cannot substitute for rigorous statistical auditing of discrimination, probability calibration, and threshold transfer. Prior literature has cautioned that visual heatmaps may visually highlight thoracic regions even when the underlying predictive model suffers from severe probability miscalibration and decision threshold failure. Developing multi-institutional quantitative benchmarks for visual explanation fidelity remains an open challenge for clinical machine learning translation.
@@ -275,7 +269,7 @@ Our findings directly inform current regulatory frameworks established by the US
 
 1. **2D Projection Radiography vs. 3D Volumetric Imaging**: Chest radiographs compress complex three-dimensional thoracic anatomy into two dimensions, creating inherent tissue superimposition. Future investigations should extend this evaluation framework to thoracic computed tomography (CT).
 2. **Retrospective NLP Labeling**: Both NIH and CheXpert ground truths rely on automated NLP extraction from free-text radiology reports. While labels were rigorously harmonized, residual linguistic discrepancies in report phrasing cannot be completely excluded.
-3. **Simulated Decision Workflows**: Our threshold discordance analysis modeled binary clinical triage actions mathematically; prospective clinical trials are required to measure real-time radiologist interaction and cognitive burden.
+3. **Simulated Decision Workflows**: Theoretical threshold discordance models binary clinical triage actions mathematically; prospective clinical trials are required to measure real-time radiologist interaction and cognitive burden. External multi-center evaluation is [PENDING: real CheXpert inference].
 
 ---
 
@@ -310,7 +304,8 @@ All code, data preparation scripts, model checkpoints, statistical meta-analysis
 11. Huang G, Liu Z, Van Der Maaten L, Weinberger KQ. Densely connected convolutional networks. *IEEE CVPR*. 2017;4700-4708.
 12. Tan M, Le QV. EfficientNet: Rethinking model scaling for convolutional neural networks. *ICML*. 2019;6105-6114.
 13. Selvaraju RR, Cogswell M, Das A, Vedaldi A, Parikh D, Batra D. Grad-CAM: Visual explanations from deep networks via gradient-based localization. *IEEE ICCV*. 2017;618-626.
+14. Adebayo J, Gilmer J, Muelly M, Goodfellow I, Hardt M, Kim B. Sanity checks for saliency maps. *NeurIPS*. 2018;31:9505-9515.
+15. Petsiuk V, Das A, Saenko K. RISE: Randomized input sampling for explanation of black-box models. *BMVC*. 2018.
 16. Guo C, Pleiss G, Sun Y, Weinberger KQ. On calibration of modern neural networks. *ICML*. 2017;1321-1330.
 17. Benjamini Y, Hochberg Y. Controlling the false discovery rate: A practical and powerful approach to multiple testing. *Journal of the Royal Statistical Society: Series B*. 1995;57(1):289-300.
 18. DeLong ER, DeLong DM, Clarke-Pearson DL. Comparing the areas under two or more correlated receiver operating characteristic curves: A nonparametric approach. *Biometrics*. 1988;44(3):837-845.
-
