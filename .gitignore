@@ -220,7 +220,8 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Local Datasets & Smoke Artifacts
-/data/
+/data/*
+!/data/splits/
 /results/runs/
 /results/figures/
 /results/predictions/*

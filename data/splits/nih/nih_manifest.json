@@ -1,0 +1,34 @@
+{
+  "dataset": "NIH ChestX-ray14",
+  "seed": 42,
+  "splits": {
+    "train": {
+      "path": "data/splits/nih/nih_train.csv",
+      "num_images": 73024,
+      "num_patients": 23807,
+      "pneumonia_prevalence": 0.010092572304995618,
+      "sha256": "72749d41fadeff9a90fa6b69d09720ffd1855d2de49be4cf92b2930b06c477e7"
+    },
+    "val": {
+      "path": "data/splits/nih/nih_val.csv",
+      "num_images": 13500,
+      "num_patients": 4201,
+      "pneumonia_prevalence": 0.010296296296296296,
+      "sha256": "79f974b2e0c20ba70cd324d6f8da52542a046855e10e10668b94b2a6d0ab3f2f"
+    },
+    "test": {
+      "path": "data/splits/nih/nih_test.csv",
+      "num_images": 22744,
+      "num_patients": 2518,
+      "pneumonia_prevalence": 0.02158811115019346,
+      "sha256": "c0b2723519ab2a2c6cbbdcbb0369e55af9a69abcb1ebe41bcd4b1946a1e6e527"
+    },
+    "target_cal": {
+      "path": "data/splits/nih/nih_target_cal.csv",
+      "num_images": 2852,
+      "num_patients": 279,
+      "pneumonia_prevalence": 0.02244039270687237,
+      "sha256": "973e3a3412d84c3a3f651ae7eb2db754b6642c3a01cbeb958cf901b826d2452d"
+    }
+  }
+}
