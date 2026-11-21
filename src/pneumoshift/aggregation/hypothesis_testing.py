@@ -176,7 +176,11 @@ def evaluate_study_hypotheses(
     Returns:
         List of structured HypothesisTestRecord objects.
     """
-    pred_p = Path(predictions_dir)
+    pred_p = Path(predictions_dir).resolve()
+    if "quarantine" in str(pred_p).lower():
+        raise PermissionError(
+            f"LOADER GUARD: Access to quarantined directory '{predictions_dir}' is blocked."
+        )
     is_synthetic = (
         manifest.get("metadata", {}).get("mode") == "synthetic_smoke_test"
         or not _has_real_predictions(pred_p)

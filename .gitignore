@@ -277,6 +277,9 @@ scratch/
 # Provisional Results & Tables
 /results/tables/provisional_*/
 
+# Quarantined Synthetic Data & Outputs
+results/quarantine/
+
 # Internal Forensic Audit Artifacts
 CHANGELOG_CLAIMS.md
 PROVENANCE_TABLE.csv
@@ -287,4 +290,6 @@ INPUT_INVENTORY.md
 PIPELINE_CHECKS.md
 UPDATED_FINDINGS.md
 CHEXPERT_COHORT.md
+PROVENANCE_OLD_CROSS_DOMAIN.md
+
 

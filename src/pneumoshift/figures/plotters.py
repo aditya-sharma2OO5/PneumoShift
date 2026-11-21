@@ -366,7 +366,11 @@ def load_prediction_bundle(
     If no .npz files are present, provides a calibrated empirical sample cohort so
     all figures render cleanly without ever resorting to synthetic curve formulas.
     """
-    pred_p = Path(predictions_dir)
+    pred_p = Path(predictions_dir).resolve()
+    if "quarantine" in str(pred_p).lower():
+        raise PermissionError(
+            f"LOADER GUARD: Access to quarantined directory '{predictions_dir}' is blocked."
+        )
     bundle: Dict[str, Any] = {
         "has_real_data": False,
         "cohorts": {},
@@ -378,6 +382,10 @@ def load_prediction_bundle(
     if pred_p.is_dir():
         npz_files = list(pred_p.glob("*.npz"))
         for npz_file in npz_files:
+            if "quarantine" in str(npz_file.resolve()).lower():
+                raise PermissionError(
+                    f"LOADER GUARD: Access to quarantined file '{npz_file}' is blocked."
+                )
             try:
                 data = np.load(npz_file, allow_pickle=True)
                 y_true = data["y_true"]

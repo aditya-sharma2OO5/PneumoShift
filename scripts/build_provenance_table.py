@@ -230,8 +230,15 @@ def build_provenance(
     })
 
     df = pd.DataFrame(rows)
-    df.to_csv(output_csv, index=False)
-    print(f"Successfully generated {output_csv} with {len(df)} real provenance entries.")
+    for idx, r in df.iterrows():
+        it = str(r["item"])
+        if "(In-Domain)" in it or "(In-Domain Baseline)" in it or ("(Source " in it and "tau" in it):
+            df.at[idx, "data_source"] = "unverified"
+        else:
+            df.at[idx, "data_source"] = "synthetic (quarantined)"
+    csv_str = "# QUARANTINED: provenance under investigation\n" + df.to_csv(index=False)
+    output_csv.write_text(csv_str, encoding="utf-8")
+    print(f"Successfully generated {output_csv} with {len(df)} quarantined provenance entries.")
 
 if __name__ == "__main__":
     build_provenance()

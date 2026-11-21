@@ -377,6 +377,10 @@ class PredictionBundle:
 
     def load_and_audit(self) -> None:
         """Loads all required prediction arrays and verifies schema and run_id."""
+        if "quarantine" in str(self.predictions_dir.resolve()).lower():
+            raise PermissionError(
+                f"LOADER GUARD: Access to quarantined directory '{self.predictions_dir}' is blocked."
+            )
         logger.info("Loading prediction bundle from '%s' for run_id='%s'...", self.predictions_dir, self.run_id)
 
         for arch in self.archs:
