@@ -156,11 +156,11 @@ def regenerate_tables_from_bundle(
                 cr_auprcs.append(m_cr["auprc"])
                 cr_sens90s.append(m_cr["sens_at_90_spec"])
 
-        # Compute empirical stats across seeds (zero hardcoded fallbacks)
+        # Compute empirical stats across seeds (sample standard deviation with ddof=1)
         in_auc_mean = float(np.mean(in_aurocs)) if in_aurocs else 0.5
-        in_auc_std = float(np.std(in_aurocs)) if len(in_aurocs) > 1 else 0.0
+        in_auc_std = float(np.std(in_aurocs, ddof=1)) if len(in_aurocs) > 1 else 0.0
         in_pr_mean = float(np.mean(in_auprcs)) if in_auprcs else 0.0
-        in_pr_std = float(np.std(in_auprcs)) if len(in_auprcs) > 1 else 0.0
+        in_pr_std = float(np.std(in_auprcs, ddof=1)) if len(in_auprcs) > 1 else 0.0
         in_s90 = float(np.mean(in_sens90s)) if in_sens90s else 0.0
 
         t1_rows.append({
@@ -176,9 +176,9 @@ def regenerate_tables_from_bundle(
         })
 
         cr_auc_mean = float(np.mean(cr_aurocs)) if cr_aurocs else 0.5
-        cr_auc_std = float(np.std(cr_aurocs)) if len(cr_aurocs) > 1 else 0.0
+        cr_auc_std = float(np.std(cr_aurocs, ddof=1)) if len(cr_aurocs) > 1 else 0.0
         cr_pr_mean = float(np.mean(cr_auprcs)) if cr_auprcs else 0.0
-        cr_pr_std = float(np.std(cr_auprcs)) if len(cr_auprcs) > 1 else 0.0
+        cr_pr_std = float(np.std(cr_auprcs, ddof=1)) if len(cr_auprcs) > 1 else 0.0
         cr_s90 = float(np.mean(cr_sens90s)) if cr_sens90s else 0.0
         gap = in_auc_mean - cr_auc_mean
 
@@ -298,7 +298,7 @@ def regenerate_tables_from_bundle(
 
         def make_t2_row(regime_name: str, ece_list, ad_ece_list, brier_list, nll_list, rec_val: str):
             em = float(np.mean(ece_list)) if ece_list else 0.0
-            es = float(np.std(ece_list)) if len(ece_list) > 1 else 0.0
+            es = float(np.std(ece_list, ddof=1)) if len(ece_list) > 1 else 0.0
             return {
                 "Architecture": arch_display,
                 "Shift Direction": "NIH -> CheXpert",

@@ -112,7 +112,7 @@ def train_domain_classifier_probe(
     total_acc = float(accuracy_score(y, oof_preds))
     total_bacc = float(balanced_accuracy_score(y, oof_preds))
     mean_fold_auc = float(np.mean(fold_aurocs)) if fold_aurocs else total_auroc
-    std_fold_auc = float(np.std(fold_aurocs)) if fold_aurocs else 0.0
+    std_fold_auc = float(np.std(fold_aurocs, ddof=1)) if len(fold_aurocs) > 1 else 0.0
 
     return {
         "domain_probe_auroc": total_auroc,  # Backwards compatibility

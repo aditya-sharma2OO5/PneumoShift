@@ -295,7 +295,7 @@ def compute_score_distribution_shift(
             "q25": q25,
             "q75": q75,
             "mean": float(np.mean(arr)),
-            "std": float(np.std(arr)),
+            "std": float(np.std(arr, ddof=1)) if len(arr) > 1 else 0.0,
             "count": len(arr),
         }
 

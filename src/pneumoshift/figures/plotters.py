@@ -821,14 +821,14 @@ def plot_fig2_roc_pr_curves(
         mean_prec = np.mean(precs, axis=0)
         mean_auprc = float(np.mean(auprcs))
 
-        # Multi-seed standard error of the mean (SEM) 95% confidence band
+        # Multi-seed standard error of the mean (SEM) 95% confidence band (ddof=1)
         if len(seed_cohorts) > 1:
             n_s = len(seed_cohorts)
-            tpr_sem = np.std(tprs, axis=0) / np.sqrt(n_s)
+            tpr_sem = np.std(tprs, axis=0, ddof=1) / np.sqrt(n_s)
             tpr_low = np.clip(mean_tpr - 1.96 * tpr_sem, 0.0, 1.0)
             tpr_high = np.clip(mean_tpr + 1.96 * tpr_sem, 0.0, 1.0)
 
-            prec_sem = np.std(precs, axis=0) / np.sqrt(n_s)
+            prec_sem = np.std(precs, axis=0, ddof=1) / np.sqrt(n_s)
             prec_low = np.clip(mean_prec - 1.96 * prec_sem, 0.0, 1.0)
             prec_high = np.clip(mean_prec + 1.96 * prec_sem, 0.0, 1.0)
         else:
@@ -1167,14 +1167,14 @@ def plot_fig5_architecture_and_uncertainty(
                     eff_cr_seeds.append(auc)
 
     dn_in_mean = float(np.mean(dn_in_seeds)) if dn_in_seeds else 0.6751
-    dn_in_std = float(np.std(dn_in_seeds)) if len(dn_in_seeds) > 1 else 0.0338
+    dn_in_std = float(np.std(dn_in_seeds, ddof=1)) if len(dn_in_seeds) > 1 else 0.0338
     dn_cr_mean = float(np.mean(dn_cr_seeds)) if dn_cr_seeds else 0.6610
-    dn_cr_std = float(np.std(dn_cr_seeds)) if len(dn_cr_seeds) > 1 else 0.0120
+    dn_cr_std = float(np.std(dn_cr_seeds, ddof=1)) if len(dn_cr_seeds) > 1 else 0.0120
 
     eff_in_mean = float(np.mean(eff_in_seeds)) if eff_in_seeds else 0.6825
-    eff_in_std = float(np.std(eff_in_seeds)) if len(eff_in_seeds) > 1 else 0.0240
+    eff_in_std = float(np.std(eff_in_seeds, ddof=1)) if len(eff_in_seeds) > 1 else 0.0240
     eff_cr_mean = float(np.mean(eff_cr_seeds)) if eff_cr_seeds else 0.6610
-    eff_cr_std = float(np.std(eff_cr_seeds)) if len(eff_cr_seeds) > 1 else 0.0100
+    eff_cr_std = float(np.std(eff_cr_seeds, ddof=1)) if len(eff_cr_seeds) > 1 else 0.0100
 
     in_auroc = [dn_in_mean, eff_in_mean]
     in_err = [dn_in_std, eff_in_std]
