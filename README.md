@@ -124,6 +124,11 @@ For evaluating the 6 verified historical NIH model checkpoints on real CheXpert 
 - **Manifest Generator**: `python scripts/create_checkpoint_manifest.py` (builds `checkpoint_manifest.json`)
 - **Execution Guide**: Refer to [`README_KAGGLE_INFERENCE.md`](README_KAGGLE_INFERENCE.md) for step-by-step instructions on uploading checkpoints to Kaggle as a private dataset, attaching CheXpert, verifying SHA-256 lineage, and running the NIH Sanity Gate prior to inference.
 
+### Provenance Lineage & Authenticity Verification
+Cryptographic prediction stamps guard against accidental data mixing. Lineage and scientific authenticity are established by:
+1. **Re-running Checkpoints on NIH**: Re-evaluating checkpoints on NIH validation and test sets to verify that fresh logits match recorded predictions within numerical precision.
+2. **Classifier Head Projection Consistency**: Verifying that saved penultimate features linearly project to stored logits via the checkpoint classification head ($z = x W^T + b$). Running `python scripts/verify_nih_predictions_against_checkpoints.py` recomputes this across all 12 NIH prediction files and asserts maximum absolute difference $\le 10^{-4}$.
+
 ---
 
 ## 6. Disclaimer

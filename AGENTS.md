@@ -4,6 +4,7 @@ This repository enforces strict medical machine learning research standards, sin
 
 ## 1. Empirical Single Source of Truth Invariant
 - **Stamped Real Inference Only**: No table or figure may use anything but stamped real-inference predictions (`data_source == "real_inference"`) verified against `checkpoint_manifest.json`. Access to quarantined or unverified data is strictly prohibited and guarded.
+- **Cryptographic Provenance Lineage**: Stored prediction stamps guard against accidental misuse. Authenticity is established by (i) re-running model checkpoints on the source NIH dataset and matching stored predictions, and (ii) verifying classifier-head projection consistency (`logits == features @ W.T + b` via `scripts/verify_nih_predictions_against_checkpoints.py`).
 - **Zero Synthetic Curves or Parametric Approximations**: Never use mathematical parametric approximations (such as power laws $TPR = FPR^a$, exponential decay PR formulas, or Gaussian bell F1 curves). All curves in publication figures must be computed strictly via empirical functions (`roc_curve()`, `precision_recall_curve()`) on discrete `(y_true, y_score)` arrays loaded from verified real inference.
 - **Raw Empirical Curves (Zero Cosmetic Smoothing)**: Never generate, smooth, tune, or alter data to improve visual appearance. ROC and Precision-Recall curves are drawn strictly from raw empirical coordinates. At ~2% clinical prevalence, step-like, discrete, or jagged PR curves are the expected mathematical reality; smoothing or simulating continuous distributions to eliminate steps is scientific fabrication.
 - **On-Curve Operating Points**: Any operating point marker (e.g., Youden's J cutoff $(FPR, TPR)$) must be indexed directly from the empirical `roc_curve()` coordinates so it mathematically sits strictly on the empirical curve.
@@ -26,7 +27,7 @@ This repository enforces strict medical machine learning research standards, sin
 
 ## 5. Single-Command Reproducibility & Auditing
 - Master aggregation scripts must remain functional and self-contained, capable of ingesting raw `.npz` arrays from `results/predictions/`, updating all master tables in CSV/JSON/MD/LaTeX, rendering all figures in PDF/SVG/PNG, and running automated consistency checks in under 20 seconds.
-- Every figure file (18 total across 6 figures $\times$ 3 formats) must exist and be non-empty.
+- Figures are generated only from stamped real predictions; a missing figure is acceptable; never generate a figure to satisfy a count.
 
 ## 6. Transparent Literature Benchmark Positioning
 - Never claim unconditioned superiority over literature benchmarks (such as Pan et al., 2019) when patient split protocols differ.
