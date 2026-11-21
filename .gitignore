@@ -280,6 +280,10 @@ scratch/
 # Quarantined Synthetic Data & Outputs
 results/quarantine/
 
+# Local Checkpoints & Root Duplicate Manifests
+/results/checkpoints/
+/checkpoint_manifest.json
+
 # Internal Forensic Audit Artifacts
 CHANGELOG_CLAIMS.md
 PROVENANCE_TABLE.csv
@@ -291,5 +295,9 @@ PIPELINE_CHECKS.md
 UPDATED_FINDINGS.md
 CHEXPERT_COHORT.md
 PROVENANCE_OLD_CROSS_DOMAIN.md
+REPORT.md
+scripts/update_provenance_table.py
+scripts/build_kaggle_notebook.py
+
 
 
