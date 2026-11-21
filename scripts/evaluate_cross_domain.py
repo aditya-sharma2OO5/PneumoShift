@@ -541,19 +541,25 @@ def main() -> None:
             model, loader_src_val, device, desc="Source Val Cohort"
         )
     else:
-        logger.info("Synthesizing source validation baseline for dry run...")
-        np.random.seed(args.seed)
-        n_src_val = 150
-        src_logits = np.random.randn(n_src_val, num_classes).astype(np.float32)
-        src_probs = 1.0 / (1.0 + np.exp(-src_logits))
-        src_targets = (np.random.rand(n_src_val, num_classes) > 0.8).astype(np.float32)
-        src_feats = np.random.randn(n_src_val, tgt_feats.shape[1]).astype(np.float32)
-        df_src_val = pd.DataFrame({
-            "patient_id": [f"src_pat_{i}" for i in range(n_src_val)],
-            "view_position": ["PA"] * (n_src_val // 2) + ["AP"] * (n_src_val - n_src_val // 2),
-            "sex": ["M"] * (n_src_val // 2) + ["F"] * (n_src_val - n_src_val // 2),
-            "age": [45.0] * n_src_val,
-        })
+        if args.smoke_test:
+            logger.info("Synthesizing source validation baseline strictly for smoke test in smoke dir...")
+            np.random.seed(args.seed)
+            n_src_val = 150
+            src_logits = np.random.randn(n_src_val, num_classes).astype(np.float32)
+            src_probs = 1.0 / (1.0 + np.exp(-src_logits))
+            src_targets = (np.random.rand(n_src_val, num_classes) > 0.8).astype(np.float32)
+            src_feats = np.random.randn(n_src_val, tgt_feats.shape[1]).astype(np.float32)
+            df_src_val = pd.DataFrame({
+                "patient_id": [f"src_pat_{i}" for i in range(n_src_val)],
+                "view_position": ["PA"] * (n_src_val // 2) + ["AP"] * (n_src_val - n_src_val // 2),
+                "sex": ["M"] * (n_src_val // 2) + ["F"] * (n_src_val - n_src_val // 2),
+                "age": [45.0] * n_src_val,
+            })
+        else:
+            raise FileNotFoundError(
+                "Source validation cohort data is missing. "
+                "Synthesizing fallback baseline data in non-smoke execution is strictly prohibited."
+            )
 
     # Patient IDs and Image IDs
     def _extract_image_ids(df_obj: pd.DataFrame) -> np.ndarray:
@@ -594,6 +600,13 @@ def main() -> None:
         )
 
     tgt_row_order_hash = hashlib.sha256("".join(tgt_image_ids.astype(str)).encode("utf-8")).hexdigest()
+    ckpt_bytes = ckpt_path.read_bytes() if ckpt_path.is_file() else b""
+    cur_ckpt_sha = hashlib.sha256(ckpt_bytes).hexdigest() if ckpt_bytes else "unknown"
+    cur_cfg_sha = hashlib.sha256(Path(args.config).read_bytes()).hexdigest() if Path(args.config).is_file() else "unknown"
+    cur_git_commit = get_git_commit()
+    cur_ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    cur_ds_name = str(tgt_data_cfg.get("dataset_name", "chexpert"))
+
     np.savez_compressed(
         tgt_pred_path,
         y_true=tgt_targets,
@@ -605,6 +618,15 @@ def main() -> None:
         label_cols=np.array(classes),
         split_csv_row_order_hash=tgt_row_order_hash,
         features=tgt_feats,
+        generated_by=np.array("evaluate_cross_domain.py"),
+        git_commit=np.array(cur_git_commit),
+        run_id=np.array(run_id),
+        checkpoint_sha256=np.array(cur_ckpt_sha),
+        config_hash=np.array(cur_cfg_sha),
+        dataset_name=np.array(cur_ds_name),
+        row_order_hash=np.array(tgt_row_order_hash),
+        timestamp=np.array(cur_ts),
+        data_source=np.array("real_inference"),
     )
     logger.info("Saved raw target cross-domain predictions (.npz) to %s (samples: %d, row_order_hash: %s)", tgt_pred_path, len(df_tgt_test), tgt_row_order_hash[:10])
     mirror_tgt_path = out_dir / f"predictions_cross_domain_{arch}_{eval_seed}.npz"

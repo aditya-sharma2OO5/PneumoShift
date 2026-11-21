@@ -42,6 +42,7 @@ from pneumoshift.figures.config_schemas import (
     get_preset_dimensions,
     load_figure_config,
 )
+from pneumoshift.data.provenance import verify_prediction_stamp
 from pneumoshift.utils.io import load_json
 from pneumoshift.utils.logging import get_logger
 
@@ -303,68 +304,14 @@ def compute_empirical_pr_curve(
     }
 
 
-def _generate_fallback_cohort(
-    n_samples: int = 5000,
-    prevalence: float = 0.022,
-    in_auc_target: float = 0.675,
-    cross_auc_target: float = 0.661,
-    seed: int = 42,
-) -> Dict[str, Dict[str, np.ndarray]]:
-    """Generates realistic discrete patient-level evaluation cohorts (fallback when .npz pending).
-
-    Produces real discrete (y_true, y_score) arrays so ALL downstream logic runs identical
-    empirical routines rather than using synthetic parametric curve formulas.
-    """
-    rng = np.random.RandomState(seed)
-    n_pos = int(n_samples * prevalence)
-    n_neg = n_samples - n_pos
-
-    y_true = np.zeros(n_samples, dtype=int)
-    y_true[:n_pos] = 1
-
-    # In-Domain Logits (yields AUROC ~ 0.675 matching official patient-partitioned test split)
-    logits_neg_in = rng.normal(-1.60, 1.20, n_neg)
-    logits_pos_in = rng.normal(-0.85, 1.20, n_pos)
-    logits_in = np.concatenate([logits_pos_in, logits_neg_in])
-    scores_in = 1.0 / (1.0 + np.exp(-logits_in))
-
-    # Cross-Domain Logits (yields AUROC ~ 0.661 matching CheXpert transfer)
-    logits_neg_cr = rng.normal(-1.50, 1.25, n_neg)
-    logits_pos_cr = rng.normal(-0.80, 1.25, n_pos)
-    logits_cr = np.concatenate([logits_pos_cr, logits_neg_cr])
-    scores_cr = 1.0 / (1.0 + np.exp(-logits_cr))
-
-    # Source Val Logits (for threshold selection & temperature calibration)
-    logits_neg_val = rng.normal(-1.80, 1.15, n_neg)
-    logits_pos_val = rng.normal(-0.70, 1.15, n_pos)
-    logits_val = np.concatenate([logits_pos_val, logits_neg_val])
-    scores_val = 1.0 / (1.0 + np.exp(-logits_val))
-
-    # EfficientNet Logits (yields AUROC ~ 0.683 in-domain, ~ 0.661 cross-domain)
-    eff_neg_in = rng.normal(-1.65, 1.18, n_neg)
-    eff_pos_in = rng.normal(-0.82, 1.18, n_pos)
-    eff_scores_in = 1.0 / (1.0 + np.exp(-np.concatenate([eff_pos_in, eff_neg_in])))
-
-    eff_neg_cr = rng.normal(-1.50, 1.25, n_neg)
-    eff_pos_cr = rng.normal(-0.80, 1.25, n_pos)
-    eff_scores_cr = 1.0 / (1.0 + np.exp(-np.concatenate([eff_pos_cr, eff_neg_cr])))
-
-    return {
-        "densenet121_test": {"y_true": y_true, "y_score": scores_in, "y_logits": logits_in},
-        "densenet121_val": {"y_true": y_true, "y_score": scores_val, "y_logits": logits_val},
-        "densenet121_cross": {"y_true": y_true, "y_score": scores_cr, "y_logits": logits_cr},
-        "efficientnet_b0_test": {"y_true": y_true, "y_score": eff_scores_in, "y_logits": None},
-        "efficientnet_b0_cross": {"y_true": y_true, "y_score": eff_scores_cr, "y_logits": None},
-    }
-
-
 def load_prediction_bundle(
     predictions_dir: Union[str, Path] = "results/predictions",
 ) -> Dict[str, Any]:
     """Scans and loads raw prediction arrays (.npz) and threshold metadata (.json).
 
-    If no .npz files are present, provides a calibrated empirical sample cohort so
-    all figures render cleanly without ever resorting to synthetic curve formulas.
+    Asserts that all prediction files carry valid 'real_inference' provenance stamps
+    and originate from authorized model checkpoints. Fallbacks and synthetic generators
+    are strictly prohibited.
     """
     pred_p = Path(predictions_dir).resolve()
     if "quarantine" in str(pred_p).lower():
@@ -388,6 +335,7 @@ def load_prediction_bundle(
                 )
             try:
                 data = np.load(npz_file, allow_pickle=True)
+                verify_prediction_stamp(data, filepath=npz_file)
                 y_true = data["y_true"]
                 y_score = data["y_score"]
                 y_logits = data["y_logits"] if "y_logits" in data else None
@@ -440,24 +388,10 @@ def load_prediction_bundle(
                 logger.warning("Could not load tau selection %s: %s", tau_file, e)
 
     if not bundle["has_real_data"]:
-        logger.info("No raw .npz files found in %s; using calibrated empirical fallback cohort.", pred_p)
-        fallback = _generate_fallback_cohort()
-        bundle["cohorts"]["predictions_test_densenet121_42"] = fallback["densenet121_test"]
-        bundle["cohorts"]["predictions_val_densenet121_42"] = fallback["densenet121_val"]
-        bundle["cohorts"]["predictions_cross_domain_densenet121_42"] = fallback["densenet121_cross"]
-        bundle["cohorts"]["predictions_test_efficientnet_b0_42"] = fallback["efficientnet_b0_test"]
-        bundle["cohorts"]["predictions_cross_domain_efficientnet_b0_42"] = fallback["efficientnet_b0_cross"]
-        bundle["available_seeds"] = {"42"}
-        bundle["available_archs"] = {"densenet121", "efficientnet_b0"}
-
-        # Compute fallback optimal threshold on validation set
-        opt_thresh = compute_optimal_thresholds(fallback["densenet121_val"]["y_true"], fallback["densenet121_val"]["y_score"])
-        bundle["tau_selections"]["tau_selection_densenet121_42"] = {
-            "source_val_optimal_tau": float(opt_thresh["youden_threshold"]),
-            "youden_tau": float(opt_thresh["youden_threshold"]),
-            "sens90_tau": float(opt_thresh["fixed_sensitivity"]["threshold"]),
-            "f1_tau": float(opt_thresh["f1_threshold"]),
-        }
+        raise FileNotFoundError(
+            f"No valid stamped prediction arrays found in '{pred_p}'. "
+            "Fabrication, synthetic cohorts, and fallback generators are strictly prohibited."
+        )
 
     return bundle
 
@@ -531,16 +465,15 @@ def _get_cohort_arrays(
         y_logits = np.mean([c["y_logits"] for c in matching], axis=0) if has_logits else None
         return y_true, y_score, y_logits
 
-    # Fallback to any available match
+    # Check any available match
     for k, c in cohorts.items():
         if split.lower() in k.lower():
             return c["y_true"], c["y_score"], c.get("y_logits")
 
-    # Final dummy if nothing found
-    fallback = _generate_fallback_cohort()
-    k_fallback = "densenet121_test" if "test" in split else "densenet121_cross"
-    c = fallback[k_fallback]
-    return c["y_true"], c["y_score"], c.get("y_logits")
+    raise KeyError(
+        f"No stamped prediction arrays found for architecture '{arch}' and split '{split}'. "
+        "Fabrication and fallback generation are prohibited."
+    )
 
 
 def _load_master_tables_data(tables_dir: Optional[Union[str, Path]] = None) -> Dict[str, Any]:

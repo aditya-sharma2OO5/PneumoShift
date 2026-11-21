@@ -17,6 +17,7 @@ from scipy import stats
 from sklearn.metrics import roc_auc_score
 
 from pneumoshift.aggregation.config_schemas import HypothesisTestRecord
+from pneumoshift.data.provenance import verify_prediction_stamp
 from pneumoshift.evaluation.bootstrap import (
     paired_bootstrap_auroc_diff,
     two_sample_bootstrap_diff,
@@ -202,6 +203,9 @@ def evaluate_study_hypotheses(
         dn_test = np.load(dn_test_p)
         dn_cross = np.load(dn_cross_p)
         dn_val = np.load(dn_val_p)
+        verify_prediction_stamp(dn_test, dn_test_p)
+        verify_prediction_stamp(dn_cross, dn_cross_p)
+        verify_prediction_stamp(dn_val, dn_val_p)
 
         yt_in, yp_in, pid_in = dn_test["y_true"][:, 5], dn_test["y_score"][:, 5], dn_test["patient_ids"]
         yt_cr, yp_cr, pid_cr = dn_cross["y_true"][:, 5], dn_cross["y_score"][:, 5], dn_cross["patient_ids"]
@@ -333,12 +337,20 @@ def evaluate_study_hypotheses(
         seeds = ["42", "1337", "2024"]
         dn_gaps, eff_gaps = [], []
         for s in seeds:
-            f_in_d = np.load(pred_p / f"predictions_test_densenet121_{s}.npz")
-            f_cr_d = np.load(pred_p / f"predictions_cross_domain_densenet121_{s}.npz")
+            p_in_d = pred_p / f"predictions_test_densenet121_{s}.npz"
+            p_cr_d = pred_p / f"predictions_cross_domain_densenet121_{s}.npz"
+            f_in_d = np.load(p_in_d)
+            f_cr_d = np.load(p_cr_d)
+            verify_prediction_stamp(f_in_d, p_in_d)
+            verify_prediction_stamp(f_cr_d, p_cr_d)
             dn_gaps.append(float(roc_auc_score(f_in_d["y_true"][:, 5], f_in_d["y_score"][:, 5]) - roc_auc_score(f_cr_d["y_true"][:, 5], f_cr_d["y_score"][:, 5])))
 
-            f_in_e = np.load(pred_p / f"predictions_test_efficientnet_b0_{s}.npz")
-            f_cr_e = np.load(pred_p / f"predictions_cross_domain_efficientnet_b0_{s}.npz")
+            p_in_e = pred_p / f"predictions_test_efficientnet_b0_{s}.npz"
+            p_cr_e = pred_p / f"predictions_cross_domain_efficientnet_b0_{s}.npz"
+            f_in_e = np.load(p_in_e)
+            f_cr_e = np.load(p_cr_e)
+            verify_prediction_stamp(f_in_e, p_in_e)
+            verify_prediction_stamp(f_cr_e, p_cr_e)
             eff_gaps.append(float(roc_auc_score(f_in_e["y_true"][:, 5], f_in_e["y_score"][:, 5]) - roc_auc_score(f_cr_e["y_true"][:, 5], f_cr_e["y_score"][:, 5])))
 
         gap_diffs = [d - e for d, e in zip(dn_gaps, eff_gaps)]

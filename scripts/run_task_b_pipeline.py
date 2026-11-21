@@ -29,6 +29,8 @@ from scipy import optimize, stats
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score, brier_score_loss, log_loss
 
+from pneumoshift.data.provenance import verify_prediction_stamp
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("TaskB_Pipeline")
 
@@ -434,7 +436,8 @@ class PredictionBundle:
                 self.data[f"tau_{arch}_{seed}"] = tau_data
 
     def _verify_keys(self, npz_data: Any, required_keys: List[str], filename: str) -> None:
-        """Verifies presence of required keys."""
+        """Verifies presence of required keys and checks provenance stamp."""
+        verify_prediction_stamp(npz_data, filepath=filename)
         missing = [k for k in required_keys if k not in npz_data]
         if missing:
             raise KeyError(f"File '{filename}' is missing essential keys: {missing}")
