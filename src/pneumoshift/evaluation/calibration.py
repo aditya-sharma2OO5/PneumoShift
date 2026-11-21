@@ -3,6 +3,7 @@
 from typing import Any, Dict, List, Literal, Optional, Tuple
 import numpy as np
 import scipy.optimize
+import scipy.special
 import torch
 import torch.nn as nn
 
@@ -131,10 +132,11 @@ class TemperatureScaling:
             return 1.0
 
         def nll_loss(t: np.ndarray) -> float:
-            temp = max(float(t[0]), 1e-3)
+            temp = max(float(t[0]), 1e-4)
             scaled_z = z_v / temp
-            # Numerically stable binary cross-entropy with logits: max(z, 0) - z * y + log(1 + exp(-|z|))
-            loss = np.maximum(scaled_z, 0.0) - scaled_z * y_v + np.log1p(np.exp(-np.abs(scaled_z)))
+            # Numerically stable binary cross-entropy with logits using logaddexp:
+            # log(1 + exp(scaled_z)) - y_v * scaled_z
+            loss = np.logaddexp(0.0, scaled_z) - y_v * scaled_z
             return float(np.mean(loss))
 
         res = scipy.optimize.minimize(
@@ -142,7 +144,6 @@ class TemperatureScaling:
             x0=np.array([1.0], dtype=np.float64),
             bounds=[(0.05, 5.0)],
             method="L-BFGS-B",
-            options={"eps": 1e-4},
         )
         return float(res.x[0])
 
@@ -174,8 +175,78 @@ class TemperatureScaling:
             scaled_logits = logits / np.maximum(self.temperatures[None, :], 1e-4)
         else:
             scaled_logits = logits / max(self.temperature, 1e-4)
-        scaled_logits = np.clip(scaled_logits, -20.0, 20.0)
-        return 1.0 / (1.0 + np.exp(-scaled_logits))
+        return scipy.special.expit(scaled_logits)
+
+
+class PlattScaling:
+    """Post-hoc probability calibration via learned affine transformation (Platt scaling).
+
+    Transforms logits z -> u = a * z + b and returns probabilities p = sigmoid(u).
+    Parameters (a, b) are fitted via maximum likelihood / binary cross-entropy NLL.
+    """
+
+    def __init__(self) -> None:
+        self.a: float = 1.0
+        self.b: float = 0.0
+        self.a_vec: Optional[np.ndarray] = None
+        self.b_vec: Optional[np.ndarray] = None
+
+    def _fit_scalar(self, z: np.ndarray, y: np.ndarray) -> Tuple[float, float]:
+        valid = (y == 0.0) | (y == 1.0)
+        z_v = z[valid].astype(np.float64)
+        y_v = y[valid].astype(np.float64)
+
+        if len(y_v) == 0 or len(np.unique(y_v)) < 2:
+            return 1.0, 0.0
+
+        def nll_loss(params: np.ndarray) -> float:
+            a, b = float(params[0]), float(params[1])
+            u = a * z_v + b
+            # Numerically stable binary cross-entropy: logaddexp(0.0, u) - y_v * u
+            loss = np.logaddexp(0.0, u) - y_v * u
+            return float(np.mean(loss))
+
+        res = scipy.optimize.minimize(
+            nll_loss,
+            x0=np.array([1.0, 0.0], dtype=np.float64),
+            bounds=[(1e-4, 10.0), (-20.0, 20.0)],
+            method="L-BFGS-B",
+        )
+        return float(res.x[0]), float(res.x[1])
+
+    def fit(self, logits: np.ndarray, labels: np.ndarray) -> "PlattScaling":
+        """Fits Platt scaling parameters (a, b) on validation set logits."""
+        if logits.ndim == 1 or (logits.ndim == 2 and logits.shape[1] == 1):
+            z = logits.flatten()
+            y = labels.flatten()
+            self.a, self.b = self._fit_scalar(z, y)
+            self.a_vec = np.array([self.a])
+            self.b_vec = np.array([self.b])
+        else:
+            num_classes = logits.shape[1]
+            a_list, b_list = [], []
+            for c in range(num_classes):
+                a_c, b_c = self._fit_scalar(logits[:, c], labels[:, c])
+                a_list.append(a_c)
+                b_list.append(b_c)
+            self.a_vec = np.array(a_list)
+            self.b_vec = np.array(b_list)
+            self.a = float(np.mean(self.a_vec))
+            self.b = float(np.mean(self.b_vec))
+
+        logger.debug("Fitted Platt scaling: scalar a=%.3f, b=%.3f", self.a, self.b)
+        return self
+
+    def calibrate_logits(self, logits: np.ndarray) -> np.ndarray:
+        """Scales logits via affine transformation u = a * z + b."""
+        if self.a_vec is not None and logits.ndim == 2 and logits.shape[1] == len(self.a_vec):
+            return self.a_vec[None, :] * logits + self.b_vec[None, :]
+        return self.a * logits + self.b
+
+    def calibrate_probs(self, logits: np.ndarray) -> np.ndarray:
+        """Scales logits and returns calibrated probabilities in [0, 1]."""
+        u = self.calibrate_logits(logits)
+        return scipy.special.expit(u)
 
 
 def compute_reliability_diagram_data(

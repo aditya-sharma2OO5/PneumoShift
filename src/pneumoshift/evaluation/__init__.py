@@ -7,6 +7,7 @@ from pneumoshift.evaluation.calibration import (
     compute_reliability_diagram_data,
     evaluate_calibration_breakdown,
     TemperatureScaling,
+    PlattScaling,
 )
 from pneumoshift.evaluation.thresholds import (
     compute_binary_metrics_at_threshold,
@@ -80,6 +81,7 @@ __all__ = [
     "compute_reliability_diagram_data",
     "evaluate_calibration_breakdown",
     "TemperatureScaling",
+    "PlattScaling",
     "compute_binary_metrics_at_threshold",
     "compute_optimal_thresholds",
     "evaluate_threshold_transfer",

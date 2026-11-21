@@ -1,8 +1,8 @@
-"""Tests for calibration calculations (ECE, MCE, Temperature Scaling)."""
+"""Tests for calibration calculations (ECE, MCE, Temperature Scaling, Platt Scaling)."""
 
 import numpy as np
 import pytest
-from pneumoshift.evaluation.calibration import TemperatureScaling, compute_ece
+from pneumoshift.evaluation.calibration import PlattScaling, TemperatureScaling, compute_ece
 
 
 def test_perfect_calibration_ece():
@@ -37,4 +37,38 @@ def test_temperature_scaling_optimization():
     assert scaler.temperature > 0.0
     cal_probs = scaler.calibrate_probs(logits)
     assert np.all(cal_probs >= 0.0) and np.all(cal_probs <= 1.0)
+
+
+def test_platt_scaling_optimization():
+    logits = np.array([-2.0, -1.0, 1.5, 2.5, -3.0, 3.0])
+    labels = np.array([0, 0, 1, 1, 0, 1])
+
+    scaler = PlattScaling()
+    scaler.fit(logits, labels)
+
+    assert scaler.a > 0.0
+    cal_probs = scaler.calibrate_probs(logits)
+    assert np.all(cal_probs >= 0.0) and np.all(cal_probs <= 1.0)
+    # Check monotonicity preservation
+    assert cal_probs[0] < cal_probs[2]
+    assert cal_probs[4] < cal_probs[5]
+
+
+def test_extreme_logits_numerical_stability():
+    # Extreme logits (+100.0, -100.0) should not cause overflow, NaN, or Inf
+    logits = np.array([-100.0, -50.0, 50.0, 100.0])
+    labels = np.array([0, 0, 1, 1])
+
+    t_scaler = TemperatureScaling()
+    t_scaler.fit(logits, labels)
+    t_probs = t_scaler.calibrate_probs(logits)
+    assert not np.any(np.isnan(t_probs))
+    assert not np.any(np.isinf(t_probs))
+
+    p_scaler = PlattScaling()
+    p_scaler.fit(logits, labels)
+    p_probs = p_scaler.calibrate_probs(logits)
+    assert not np.any(np.isnan(p_probs))
+    assert not np.any(np.isinf(p_probs))
+
 
