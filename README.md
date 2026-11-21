@@ -118,7 +118,15 @@ pytest tests/test_smoke.py
 
 ---
 
-## 5. Disclaimer
+## 5. Kaggle Real Checkpoint Cross-Domain Inference
+For evaluating the 6 verified historical NIH model checkpoints on real CheXpert frontal radiographs:
+- **Notebook**: [`notebooks/kaggle_infer_old_checkpoints.ipynb`](notebooks/kaggle_infer_old_checkpoints.ipynb) (`run_id = "oldckpt_real_v1"`)
+- **Manifest Generator**: `python scripts/create_checkpoint_manifest.py` (builds `checkpoint_manifest.json`)
+- **Execution Guide**: Refer to [`README_KAGGLE_INFERENCE.md`](README_KAGGLE_INFERENCE.md) for step-by-step instructions on uploading checkpoints to Kaggle as a private dataset, attaching CheXpert, verifying SHA-256 lineage, and running the NIH Sanity Gate prior to inference.
+
+---
+
+## 6. Disclaimer
 
 This software is developed strictly for academic machine learning research and reproducible benchmark evaluation. It is **not** certified as a clinical medical device and should not be used for primary patient diagnosis or clinical decision-making.
 
