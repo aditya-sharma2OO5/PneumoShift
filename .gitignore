@@ -282,6 +282,7 @@ results/quarantine/
 
 # Local Checkpoints & Root Duplicate Manifests
 /results/checkpoints/
+/results/runs_provenance/
 /checkpoint_manifest.json
 
 # Internal Forensic Audit Artifacts
