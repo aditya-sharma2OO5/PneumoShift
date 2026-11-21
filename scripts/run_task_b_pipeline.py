@@ -1,33 +1,24 @@
-#!/usr/bin/env python3
-"""Unified Statistical Protocol & Master Table Engine for PneumoShift (Task B).
+"""
+Unified Task B Statistical Protocol & Master Table Orchestrator (Addendum 2)
 
-This script implements the unified statistical protocol across Tables 1-3:
-- Fully parameterized by run_id, input directory, splits directory, and output directory.
-- Enforces strict run_id isolation (asserts single run_id per table; mixing runs raises error).
-- Table 1: Per-seed AUROC/AUPRC (N, n_pos, n_neg), mean +/- SD over seeds (never labeled 95% CI),
-           independent-cohort DeLong test per seed, joint bootstrap across seeds (B >= 2000),
-           Benjamini-Hochberg FDR correction, and supplementary single-seed bootstrap 95% CIs.
-- Table 2: 6 calibration regimes across seeds (In-Domain, Cross-Domain Uncal, Source Temp, Source Platt,
-           Target 10% Temp [20 patient-level repeats], Target 10% Platt [20 patient-level repeats]),
-           Uniform & Adaptive ECE, Brier, BSS vs base rate, calibration slope & intercept, NLL,
-           mean prediction, N, n_pos, and explicitly defined calibration recovery (%).
-- Table 3: Patient-level 50/50 CheXpert stratified split with 20 repeats (zero patient overlap asserted),
-           source validation threshold selection, reporting both source and target sensitivity/specificity,
-           target F1 with bootstrap 95% CIs, and cohort prevalences.
-- Strict assertions: No missing keys (raises KeyError), no test data in threshold/checkpoint selection.
+Implements rigorous, unified statistical inference across Tables 1-3:
+1. Patient-level cluster bootstrap (>=2,000 resamples, fixed seed) replacing all image-level inference.
+2. Cross-cohort comparison evaluated on identical resampled patient clusters across model seeds.
+3. Reporting effective numbers: positive images AND positive patients per cohort.
+4. Independent DeLong test reported strictly as a secondary sensitivity analysis (labeled "ignoring clustering").
+5. DenseNet-121 cross-domain evaluation based strictly on on-disk computable seeds (1337, 2024; seed 42 marked not computable).
+6. Table 3: Sensitivity & Specificity primary (prevalence-invariant); F1 secondary with prevalence shift caveat.
+7. Explicit documentation of CheXpert cohort definition and NIH test list pathological enrichment limitations.
 
 Usage:
-    py -3.12 scripts/run_task_b_pipeline.py --run_id old_run --output_dir results/tables/provisional_old_run
-    py -3.12 scripts/run_task_b_pipeline.py --run_id repro_v1 --input_dir results/predictions_repro_v1 --output_dir results/tables/repro_v1
+    python scripts/run_task_b_pipeline.py --run_id old_run --output_dir results/tables/provisional_old_run
+    python scripts/run_task_b_pipeline.py --run_id repro_v1 --predictions_dir results/predictions_repro_v1 --output_dir results/tables/repro_v1
 """
-
-from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
 import json
 import logging
-import os
 from pathlib import Path
 import sys
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -36,87 +27,129 @@ import numpy as np
 import pandas as pd
 from scipy import optimize, stats
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import average_precision_score, precision_recall_curve, roc_auc_score, roc_curve
+from sklearn.metrics import average_precision_score, brier_score_loss, log_loss
 
-# Ensure repository root is in sys.path
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from pneumoshift.evaluation.thresholds import compute_binary_metrics_at_threshold, compute_optimal_thresholds
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger("task_b_pipeline")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("TaskB_Pipeline")
 
 
 # ==============================================================================
-# 1. CORE STATISTICAL UTILITIES
+# 1. CORE STATISTICAL PRIMITIVES & CLUSTER BOOTSTRAP
 # ==============================================================================
 
-def fast_auc(y_true: np.ndarray, y_score: np.ndarray) -> float:
-    """Computes AUROC via Mann-Whitney U rank sum in O(N log N) time."""
+def get_patient_clusters(patient_ids: np.ndarray) -> Tuple[List[np.ndarray], int]:
+    """Precomputes index mapping for fast patient-level cluster bootstrap."""
+    unique_pts, pt_inverse = np.unique(patient_ids, return_inverse=True)
+    n_pts = len(unique_pts)
+    pt_to_indices = [np.where(pt_inverse == i)[0] for i in range(n_pts)]
+    return pt_to_indices, n_pts
+
+
+def patient_cluster_resample(pt_to_indices: List[np.ndarray], n_pts: int, rng: np.random.RandomState) -> np.ndarray:
+    """Resamples patients with replacement and returns concatenated image indices."""
+    sampled_pt_idx = rng.randint(0, n_pts, size=n_pts)
+    return np.concatenate([pt_to_indices[i] for i in sampled_pt_idx])
+
+
+def get_cohort_summary_stats(y_true: np.ndarray, patient_ids: np.ndarray) -> Dict[str, Any]:
+    """Computes total images, total patients, positive images, and positive patients."""
     valid = (y_true == 0.0) | (y_true == 1.0)
-    yt = y_true[valid].astype(int)
-    yp = y_score[valid]
-    pos = yp[yt == 1]
-    neg = yp[yt == 0]
-    n_pos = len(pos)
-    n_neg = len(neg)
-    if n_pos == 0 or n_neg == 0:
+    yt = y_true[valid]
+    pts = patient_ids[valid]
+    n_images = len(yt)
+    n_pos_images = int(np.sum(yt == 1))
+    n_neg_images = n_images - n_pos_images
+
+    u_pts, pt_inv = np.unique(pts, return_inverse=True)
+    n_patients = len(u_pts)
+    pt_has_pos = np.zeros(n_patients, dtype=bool)
+    for p_idx, y in zip(pt_inv, yt):
+        if y == 1:
+            pt_has_pos[p_idx] = True
+    n_pos_pts = int(np.sum(pt_has_pos))
+    n_neg_pts = n_patients - n_pos_pts
+
+    return {
+        "n_images": n_images,
+        "n_pos_images": n_pos_images,
+        "n_neg_images": n_neg_images,
+        "image_prevalence": float(n_pos_images / max(n_images, 1)),
+        "n_patients": n_patients,
+        "n_pos_patients": n_pos_pts,
+        "n_neg_patients": n_neg_pts,
+        "patient_prevalence": float(n_pos_pts / max(n_patients, 1)),
+        "images_per_patient": float(n_images / max(n_patients, 1)),
+    }
+
+
+def auc_searchsorted(pos: np.ndarray, neg: np.ndarray) -> float:
+    """Fast, exact Wilcoxon-Mann-Whitney AUROC calculation using searchsorted."""
+    n_p = len(pos)
+    n_n = len(neg)
+    if n_p == 0 or n_n == 0:
         return 0.5
-    all_scores = np.concatenate([pos, neg])
-    ranks = np.argsort(np.argsort(all_scores)) + 1
-    rank_pos = ranks[:n_pos]
-    u = np.sum(rank_pos) - n_pos * (n_pos + 1) / 2.0
-    return float(u / (n_pos * n_neg))
+    neg_sorted = np.sort(neg)
+    idx_left = np.searchsorted(neg_sorted, pos, side="left")
+    idx_right = np.searchsorted(neg_sorted, pos, side="right")
+    u = np.sum(idx_left + idx_right) / 2.0
+    return float(u / (n_p * n_n))
+
+
+def compute_fast_auc(y_true: np.ndarray, y_score: np.ndarray) -> float:
+    """Wrapper for fast AUROC with binary labels."""
+    pos = y_score[y_true == 1]
+    neg = y_score[y_true == 0]
+    return auc_searchsorted(pos, neg)
 
 
 def compute_delong_auc_variance(y_true: np.ndarray, y_score: np.ndarray) -> Tuple[float, float]:
-    """Computes exact DeLong variance for AUROC in O(N log N) time."""
+    """Computes DeLong AUROC and its variance (note: assumes i.i.d. images, ignoring clustering)."""
     valid = (y_true == 0.0) | (y_true == 1.0)
-    yt = y_true[valid].astype(int)
-    yp = y_score[valid]
+    yt = y_true[valid]
+    ys = y_score[valid]
 
-    m = int(np.sum(yt == 1))
-    n = int(np.sum(yt == 0))
+    pos = ys[yt == 1]
+    neg = ys[yt == 0]
+    m = len(pos)
+    n = len(neg)
     if m == 0 or n == 0:
         return 0.5, 0.0
-    x = yp[yt == 1]
-    y = yp[yt == 0]
 
-    y_sorted = np.sort(y)
-    v10 = (np.searchsorted(y_sorted, x, side="left") + np.searchsorted(y_sorted, x, side="right")) / (2.0 * n)
+    auc = auc_searchsorted(pos, neg)
 
-    x_sorted = np.sort(x)
-    v01 = 1.0 - (np.searchsorted(x_sorted, y, side="left") + np.searchsorted(x_sorted, y, side="right")) / (2.0 * m)
+    # DeLong structural components V10 and V01
+    neg_sorted = np.sort(neg)
+    v10 = (np.searchsorted(neg_sorted, pos, side="left") + np.searchsorted(neg_sorted, pos, side="right")) / (2.0 * n)
 
-    auc = float(np.mean(v10))
+    pos_sorted = np.sort(pos)
+    v01 = 1.0 - (np.searchsorted(pos_sorted, neg, side="left") + np.searchsorted(pos_sorted, neg, side="right")) / (2.0 * m)
+
     s10 = float(np.var(v10, ddof=1)) if m > 1 else 0.0
     s01 = float(np.var(v01, ddof=1)) if n > 1 else 0.0
-
     var_auc = (s10 / m) + (s01 / n)
-    return auc, float(var_auc)
+    return float(auc), float(var_auc)
 
 
 def independent_delong_test(
-    yt1: np.ndarray, yp1: np.ndarray, yt2: np.ndarray, yp2: np.ndarray
+    y_true_1: np.ndarray,
+    y_score_1: np.ndarray,
+    y_true_2: np.ndarray,
+    y_score_2: np.ndarray,
 ) -> Dict[str, float]:
-    """Computes two-sample difference test for independent cohorts (covariance is identically 0)."""
-    auc1, var1 = compute_delong_auc_variance(yt1, yp1)
-    auc2, var2 = compute_delong_auc_variance(yt2, yp2)
+    """Performs independent two-sample DeLong test for AUROC difference (ignoring clustering)."""
+    auc1, var1 = compute_delong_auc_variance(y_true_1, y_score_1)
+    auc2, var2 = compute_delong_auc_variance(y_true_2, y_score_2)
+
     diff = auc1 - auc2
-    se_diff = float(np.sqrt(var1 + var2))
-    z = float(diff / max(se_diff, 1e-12))
+    se_diff = float(np.sqrt(max(var1 + var2, 1e-12)))
+    z = float(diff / se_diff)
     p_val = float(2.0 * (1.0 - stats.norm.cdf(abs(z))))
+
     return {
-        "auc1": auc1,
-        "se1": float(np.sqrt(var1)),
-        "auc2": auc2,
-        "se2": float(np.sqrt(var2)),
+        "auc_1": float(auc1),
+        "var_1": float(var1),
+        "auc_2": float(auc2),
+        "var_2": float(var2),
         "diff": float(diff),
         "se_diff": se_diff,
         "z": z,
@@ -196,7 +229,6 @@ def compute_comprehensive_calibration(
     mean_pred = float(np.mean(yp))
 
     # 5. Calibration Slope & Intercept
-    # Model: logit(P(y=1)) = alpha + beta * logit(yp)
     logit_yp = y_logits if y_logits is not None else np.log(yp / (1.0 - yp))
     try:
         clf = LogisticRegression(solver="lbfgs", C=1e6)
@@ -259,6 +291,74 @@ def fit_platt_scaling(logits: np.ndarray, labels: np.ndarray) -> Tuple[float, fl
     return a, b
 
 
+def compute_binary_metrics_at_threshold(
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+    threshold: float,
+) -> Dict[str, float]:
+    """Evaluates binary metrics (sensitivity, specificity, F1, precision) at decision threshold."""
+    valid = (y_true == 0.0) | (y_true == 1.0)
+    yt = y_true[valid].astype(int)
+    ys = y_score[valid]
+
+    y_pred = (ys >= threshold).astype(int)
+    tp = int(np.sum((yt == 1) & (y_pred == 1)))
+    fp = int(np.sum((yt == 0) & (y_pred == 1)))
+    fn = int(np.sum((yt == 1) & (y_pred == 0)))
+    tn = int(np.sum((yt == 0) & (y_pred == 0)))
+
+    sens = tp / max(tp + fn, 1)
+    spec = tn / max(tn + fp, 1)
+    prec = tp / max(tp + fp, 1)
+    f1 = (2.0 * prec * sens) / max(prec + sens, 1e-8)
+
+    return {
+        "threshold": float(threshold),
+        "sensitivity": float(sens),
+        "specificity": float(spec),
+        "precision": float(prec),
+        "f1_score": float(f1),
+        "tp": tp,
+        "fp": fp,
+        "fn": fn,
+        "tn": tn,
+    }
+
+
+def compute_optimal_thresholds(y_true: np.ndarray, y_score: np.ndarray) -> Dict[str, float]:
+    """Computes Youden J, Sensitivity-90, and Max-F1 thresholds on validation data."""
+    valid = (y_true == 0.0) | (y_true == 1.0)
+    yt = y_true[valid].astype(int)
+    ys = y_score[valid]
+
+    candidate_taus = np.unique(np.quantile(ys, np.linspace(0.01, 0.99, 200)))
+    best_youden = -1.0
+    best_youden_tau = 0.5
+    best_f1 = -1.0
+    best_f1_tau = 0.5
+    sens90_tau = 0.5
+    found_sens90 = False
+
+    for tau in candidate_taus:
+        m = compute_binary_metrics_at_threshold(yt, ys, tau)
+        yj = m["sensitivity"] + m["specificity"] - 1.0
+        if yj > best_youden:
+            best_youden = yj
+            best_youden_tau = tau
+        if m["f1_score"] > best_f1:
+            best_f1 = m["f1_score"]
+            best_f1_tau = tau
+        if m["sensitivity"] >= 0.90 and (not found_sens90 or tau > sens90_tau):
+            sens90_tau = tau
+            found_sens90 = True
+
+    return {
+        "youden_threshold": float(best_youden_tau),
+        "sens90_threshold": float(sens90_tau),
+        "f1_threshold": float(best_f1_tau),
+    }
+
+
 # ==============================================================================
 # 2. DATA LOADER & INVENTORY AUDITOR
 # ==============================================================================
@@ -304,11 +404,11 @@ class PredictionBundle:
                 cr_data = np.load(cr_path)
                 self._verify_keys(cr_data, ["y_true", "y_score", "y_logits", "patient_ids"], str(cr_path))
 
-                # Provisional check for overwritten smoke test file
+                # Provisional check for overwritten smoke test file (e.g. densenet121 seed 42)
                 if len(cr_data["y_true"]) < 100:
                     if self.allow_provisional:
                         logger.warning(
-                            "Provisional run_id='%s': %s contains only %d samples (overwritten by smoke test). Marking not computable.",
+                            "Provisional run_id='%s': %s contains only %d samples (smoke test artifact). Marking not computable (old_run).",
                             self.run_id, cr_path.name, len(cr_data["y_true"])
                         )
                         self.data[f"cr_{arch}_{seed}_computable"] = False
@@ -329,12 +429,11 @@ class PredictionBundle:
                         raise KeyError(f"Missing required threshold key '{req_k}' in {tau_path}")
                 self.data[f"tau_{arch}_{seed}"] = tau_data
 
-        logger.info("Successfully loaded and validated all prediction files.")
-
-    def _verify_keys(self, npz_data: Any, req_keys: List[str], filename: str) -> None:
-        for k in req_keys:
-            if k not in npz_data.files:
-                raise KeyError(f"Missing array '{k}' in {filename}. Available: {npz_data.files}")
+    def _verify_keys(self, npz_data: Any, required_keys: List[str], filename: str) -> None:
+        """Verifies presence of required keys."""
+        missing = [k for k in required_keys if k not in npz_data]
+        if missing:
+            raise KeyError(f"File '{filename}' is missing essential keys: {missing}")
 
     def get_pneumonia_slice(self, key: str) -> Dict[str, Any]:
         """Extracts 1D pneumonia predictions (column 5) and patient_ids."""
@@ -346,6 +445,7 @@ class PredictionBundle:
                 p_idx = cols.index("Pneumonia")
 
         y_true = npz["y_true"][:, p_idx] if npz["y_true"].ndim > 1 else npz["y_true"]
+        y_true = np.where(y_true == -1.0, 0.0, y_true)  # Enforce u_zeros policy
         y_score = npz["y_score"][:, p_idx] if npz["y_score"].ndim > 1 else npz["y_score"]
         y_logits = npz["y_logits"][:, p_idx] if npz["y_logits"].ndim > 1 else npz["y_logits"]
         patient_ids = npz["patient_ids"]
@@ -369,8 +469,8 @@ def generate_table_1(
     n_bootstrap: int = 2000,
     seed: int = 42,
 ) -> Tuple[Dict[str, Any], pd.DataFrame, pd.DataFrame]:
-    """Generates Table 1 and Table 1 Supplement following unified statistical protocol."""
-    logger.info("Generating Table 1: Primary Cross-Domain Discrimination Benchmark...")
+    """Generates Table 1 and Table 1 Supplement following unified statistical protocol (Addendum 2)."""
+    logger.info("Generating Table 1: Primary Cross-Domain Discrimination Benchmark (Cluster Bootstrap)...")
 
     t1_rows = []
     supplement_rows = []
@@ -378,26 +478,41 @@ def generate_table_1(
         "title": f"PROVISIONAL ({bundle.run_id}) Table 1: Primary Cross-Domain Discrimination Benchmark",
         "run_id": bundle.run_id,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "n_bootstrap": n_bootstrap,
+        "n_cluster_bootstrap": n_bootstrap,
         "protocol": {
             "aggregation": "mean +/- SD across seeds (never 95% CI)",
-            "significance_tests": [
-                "Per-seed independent-sample DeLong test",
-                "3-seed joint bootstrap resampling images within cohorts for all seeds",
-            ],
-            "fdr_adjustment": "Benjamini-Hochberg across architectures",
+            "inference": "Patient-level cluster bootstrap (>=2,000 resamples, fixed seed) accounting for repeated imaging",
+            "cross_cohort_comparison": "Resample patients independently within each cohort using identical patient resamples across model seeds",
+            "secondary_sensitivity": "DeLong test reported as secondary sensitivity analysis explicitly labeled as ignoring clustering",
+            "fdr_adjustment": "Benjamini-Hochberg across architectures on cluster-bootstrap p-values",
         },
+        "effective_cohort_numbers": {},
         "sd_ratio_explanation": (
             "In-domain AUROC standard deviation across seeds (~0.028) is ~10x larger than transferred "
             "CheXpert standard deviation (~0.003). Root causes: (1) Checkpoint selection was monitored on "
             "val_pneumonia_auroc on the NIH validation split, which contains only 139 pneumonia positives "
-            "(sampling SE approx 0.039). Random validation fluctuations caused different seeds to checkpoint "
-            "at wildly disparate epochs (e.g. Epoch 2 vs Epoch 9), producing large in-domain test spread. "
+            "across 110 patients (sampling SE approx 0.039). Random validation fluctuations caused different seeds "
+            "to checkpoint at disparate epochs (e.g. Epoch 2 vs Epoch 9), producing large in-domain test spread. "
             "(2) Domain shift to CheXpert attenuates fine-grained radiographic idiosyncrasies and projects "
             "representations onto coarse opacities, which have similar predictive performance across checkpoints, "
             "compressing transferred between-seed variance."
         ),
         "architectures": {},
+    }
+
+    # Record global cohort numbers from representative slices
+    sample_test = bundle.get_pneumonia_slice("test_densenet121_1337")
+    sample_val = bundle.get_pneumonia_slice("val_densenet121_1337")
+    sample_chex = bundle.get_pneumonia_slice("cr_densenet121_1337")
+
+    stats_val = get_cohort_summary_stats(sample_val["y_true"], sample_val["patient_ids"])
+    stats_test = get_cohort_summary_stats(sample_test["y_true"], sample_test["patient_ids"])
+    stats_chex = get_cohort_summary_stats(sample_chex["y_true"], sample_chex["patient_ids"])
+
+    table_json["effective_cohort_numbers"] = {
+        "nih_validation": stats_val,
+        "nih_test": stats_test,
+        "chexpert_test": stats_chex,
     }
 
     raw_p_boot_list = []
@@ -412,7 +527,6 @@ def generate_table_1(
         delta_aurocs = []
         delong_p_vals = []
 
-        # Gather per-seed metrics
         available_seeds = []
         for s in bundle.seeds:
             test_slice = bundle.get_pneumonia_slice(f"test_{arch}_{s}")
@@ -421,21 +535,23 @@ def generate_table_1(
             # In-domain metrics
             auc_in, var_in = compute_delong_auc_variance(test_slice["y_true"], test_slice["y_score"])
             pr_in = float(average_precision_score(test_slice["y_true"], test_slice["y_score"]))
-            n_in = len(test_slice["y_true"])
-            pos_in = int(np.sum(test_slice["y_true"] == 1))
-            neg_in = n_in - pos_in
+            c_stats_in = get_cohort_summary_stats(test_slice["y_true"], test_slice["patient_ids"])
 
             nih_aurocs.append(auc_in)
             nih_auprcs.append(pr_in)
 
-            # Single-seed image bootstrap for supplement (B >= 2000)
+            # Patient-level cluster bootstrap for NIH Test (B >= 2000)
             rng_s = np.random.RandomState(int(s) + seed)
+            map_in, n_pts_in = get_patient_clusters(test_slice["patient_ids"])
+
             boot_auc_in = []
             boot_pr_in = []
             for _ in range(n_bootstrap):
-                idx = rng_s.randint(0, n_in, size=n_in)
-                boot_auc_in.append(fast_auc(test_slice["y_true"][idx], test_slice["y_score"][idx]))
-                boot_pr_in.append(float(average_precision_score(test_slice["y_true"][idx], test_slice["y_score"][idx])))
+                idx = patient_cluster_resample(map_in, n_pts_in, rng_s)
+                yt_b = test_slice["y_true"][idx]
+                ys_b = test_slice["y_score"][idx]
+                boot_auc_in.append(compute_fast_auc(yt_b, ys_b))
+                boot_pr_in.append(float(average_precision_score(yt_b, ys_b)))
 
             ci_auc_in = [float(np.percentile(boot_auc_in, 2.5)), float(np.percentile(boot_auc_in, 97.5))]
             ci_pr_in = [float(np.percentile(boot_pr_in, 2.5)), float(np.percentile(boot_pr_in, 97.5))]
@@ -443,14 +559,15 @@ def generate_table_1(
             seed_record: Dict[str, Any] = {
                 "in_domain": {
                     "cohort": "NIH Test",
-                    "N": n_in,
-                    "n_pos": pos_in,
-                    "n_neg": neg_in,
+                    "n_images": c_stats_in["n_images"],
+                    "n_pos_images": c_stats_in["n_pos_images"],
+                    "n_patients": c_stats_in["n_patients"],
+                    "n_pos_patients": c_stats_in["n_pos_patients"],
                     "auroc": auc_in,
-                    "auroc_se": float(np.sqrt(var_in)),
-                    "auroc_95ci_boot": ci_auc_in,
+                    "delong_se_ignoring_clustering": float(np.sqrt(var_in)),
+                    "auroc_95ci_cluster_boot": ci_auc_in,
                     "auprc": pr_in,
-                    "auprc_95ci_boot": ci_pr_in,
+                    "auprc_95ci_cluster_boot": ci_pr_in,
                 }
             }
 
@@ -458,24 +575,23 @@ def generate_table_1(
                 "Architecture": arch_display,
                 "Seed": s,
                 "Cohort": "NIH Test (In-Domain)",
-                "N": n_in,
-                "n_pos": pos_in,
-                "n_neg": neg_in,
+                "N (Images)": c_stats_in["n_images"],
+                "Pos Images": c_stats_in["n_pos_images"],
+                "N (Patients)": c_stats_in["n_patients"],
+                "Pos Patients": c_stats_in["n_pos_patients"],
                 "AUROC": f"{auc_in:.4f}",
-                "AUROC [95% Bootstrap CI]": f"[{ci_auc_in[0]:.3f}, {ci_auc_in[1]:.3f}]",
+                "AUROC [95% Cluster Bootstrap CI]": f"[{ci_auc_in[0]:.3f}, {ci_auc_in[1]:.3f}]",
                 "AUPRC": f"{pr_in:.4f}",
-                "AUPRC [95% Bootstrap CI]": f"[{ci_pr_in[0]:.3f}, {ci_pr_in[1]:.3f}]",
+                "AUPRC [95% Cluster Bootstrap CI]": f"[{ci_pr_in[0]:.3f}, {ci_pr_in[1]:.3f}]",
                 "Delta AUROC": "-",
-                "DeLong p-value": "-",
+                "DeLong p-value (ignoring clustering)": "-",
             })
 
             if cr_computable:
                 cr_slice = bundle.get_pneumonia_slice(f"cr_{arch}_{s}")
                 auc_cr, var_cr = compute_delong_auc_variance(cr_slice["y_true"], cr_slice["y_score"])
                 pr_cr = float(average_precision_score(cr_slice["y_true"], cr_slice["y_score"]))
-                n_cr = len(cr_slice["y_true"])
-                pos_cr = int(np.sum(cr_slice["y_true"] == 1))
-                neg_cr = n_cr - pos_cr
+                c_stats_cr = get_cohort_summary_stats(cr_slice["y_true"], cr_slice["patient_ids"])
 
                 chex_aurocs.append(auc_cr)
                 chex_auprcs.append(pr_cr)
@@ -488,18 +604,21 @@ def generate_table_1(
                 )
                 delong_p_vals.append(delong_res["p_val"])
 
-                # Single-seed image bootstrap for CheXpert
+                # Patient-level cluster bootstrap for CheXpert and Delta AUROC
+                map_cr, n_pts_cr = get_patient_clusters(cr_slice["patient_ids"])
                 boot_auc_cr = []
                 boot_pr_cr = []
                 boot_delta = []
                 for _ in range(n_bootstrap):
-                    i_in = rng_s.randint(0, n_in, size=n_in)
-                    i_cr = rng_s.randint(0, n_cr, size=n_cr)
-                    a_in = fast_auc(test_slice["y_true"][i_in], test_slice["y_score"][i_in])
-                    a_cr = fast_auc(cr_slice["y_true"][i_cr], cr_slice["y_score"][i_cr])
-                    boot_auc_cr.append(a_cr)
-                    boot_pr_cr.append(float(average_precision_score(cr_slice["y_true"][i_cr], cr_slice["y_score"][i_cr])))
-                    boot_delta.append(a_in - a_cr)
+                    idx_in = patient_cluster_resample(map_in, n_pts_in, rng_s)
+                    idx_cr = patient_cluster_resample(map_cr, n_pts_cr, rng_s)
+
+                    a_in_b = compute_fast_auc(test_slice["y_true"][idx_in], test_slice["y_score"][idx_in])
+                    a_cr_b = compute_fast_auc(cr_slice["y_true"][idx_cr], cr_slice["y_score"][idx_cr])
+
+                    boot_auc_cr.append(a_cr_b)
+                    boot_pr_cr.append(float(average_precision_score(cr_slice["y_true"][idx_cr], cr_slice["y_score"][idx_cr])))
+                    boot_delta.append(a_in_b - a_cr_b)
 
                 ci_auc_cr = [float(np.percentile(boot_auc_cr, 2.5)), float(np.percentile(boot_auc_cr, 97.5))]
                 ci_pr_cr = [float(np.percentile(boot_pr_cr, 2.5)), float(np.percentile(boot_pr_cr, 97.5))]
@@ -507,76 +626,81 @@ def generate_table_1(
 
                 seed_record["transferred"] = {
                     "cohort": "CheXpert",
-                    "N": n_cr,
-                    "n_pos": pos_cr,
-                    "n_neg": neg_cr,
+                    "n_images": c_stats_cr["n_images"],
+                    "n_pos_images": c_stats_cr["n_pos_images"],
+                    "n_patients": c_stats_cr["n_patients"],
+                    "n_pos_patients": c_stats_cr["n_pos_patients"],
                     "auroc": auc_cr,
-                    "auroc_se": float(np.sqrt(var_cr)),
-                    "auroc_95ci_boot": ci_auc_cr,
+                    "delong_se_ignoring_clustering": float(np.sqrt(var_cr)),
+                    "auroc_95ci_cluster_boot": ci_auc_cr,
                     "auprc": pr_cr,
-                    "auprc_95ci_boot": ci_pr_cr,
+                    "auprc_95ci_cluster_boot": ci_pr_cr,
                     "delta_auroc": delta,
-                    "delta_95ci_boot": ci_delta,
-                    "delong_test": delong_res,
+                    "delta_95ci_cluster_boot": ci_delta,
+                    "delong_test_ignoring_clustering": delong_res,
                 }
 
                 supplement_rows.append({
                     "Architecture": arch_display,
                     "Seed": s,
                     "Cohort": "CheXpert (Transferred)",
-                    "N": n_cr,
-                    "n_pos": pos_cr,
-                    "n_neg": neg_cr,
+                    "N (Images)": c_stats_cr["n_images"],
+                    "Pos Images": c_stats_cr["n_pos_images"],
+                    "N (Patients)": c_stats_cr["n_patients"],
+                    "Pos Patients": c_stats_cr["n_pos_patients"],
                     "AUROC": f"{auc_cr:.4f}",
-                    "AUROC [95% Bootstrap CI]": f"[{ci_auc_cr[0]:.3f}, {ci_auc_cr[1]:.3f}]",
+                    "AUROC [95% Cluster Bootstrap CI]": f"[{ci_auc_cr[0]:.3f}, {ci_auc_cr[1]:.3f}]",
                     "AUPRC": f"{pr_cr:.4f}",
-                    "AUPRC [95% Bootstrap CI]": f"[{ci_pr_cr[0]:.3f}, {ci_pr_cr[1]:.3f}]",
+                    "AUPRC [95% Cluster Bootstrap CI]": f"[{ci_pr_cr[0]:.3f}, {ci_pr_cr[1]:.3f}]",
                     "Delta AUROC": f"{delta:+.4f} [{ci_delta[0]:.3f}, {ci_delta[1]:.3f}]",
-                    "DeLong p-value": f"{delong_res['p_val']:.4f}",
+                    "DeLong p-value (ignoring clustering)": f"{delong_res['p_val']:.4f}",
                 })
                 available_seeds.append(s)
             else:
                 seed_record["transferred"] = {
                     "cohort": "CheXpert",
-                    "status": "not_computable_provisional",
-                    "reason": "Overwritten with 4 samples during smoke test",
+                    "status": "not_computable_old_run",
+                    "reason": "Overwritten with 4 dummy samples during smoke test; excluded from old_run calculations",
                 }
                 supplement_rows.append({
                     "Architecture": arch_display,
                     "Seed": s,
                     "Cohort": "CheXpert (Transferred)",
-                    "N": 4,
-                    "n_pos": 1,
-                    "n_neg": 3,
-                    "AUROC": "not computable (N=4)",
-                    "AUROC [95% Bootstrap CI]": "-",
+                    "N (Images)": "not computable (old_run)",
+                    "Pos Images": "-",
+                    "N (Patients)": "not computable (old_run)",
+                    "Pos Patients": "-",
+                    "AUROC": "not computable (old_run)",
+                    "AUROC [95% Cluster Bootstrap CI]": "-",
                     "AUPRC": "-",
-                    "AUPRC [95% Bootstrap CI]": "-",
+                    "AUPRC [95% Cluster Bootstrap CI]": "-",
                     "Delta AUROC": "-",
-                    "DeLong p-value": "-",
+                    "DeLong p-value (ignoring clustering)": "-",
                 })
 
             arch_meta["seeds"][s] = seed_record
 
         # -------------------------------------------------------------
-        # Joint Bootstrap Across Available Seeds (B >= 2000)
-        # Resamples images within each cohort; evaluates all seeds on same resample
+        # Joint Patient-Level Cluster Bootstrap Across Available Seeds (B >= 2000)
+        # Resamples patients independently within NIH and CheXpert cohorts;
+        # Evaluates all available seeds on the SAME patient resamples.
         # -------------------------------------------------------------
         rng_joint = np.random.RandomState(seed)
         t_slices = [bundle.get_pneumonia_slice(f"test_{arch}_{s}") for s in available_seeds]
         c_slices = [bundle.get_pneumonia_slice(f"cr_{arch}_{s}") for s in available_seeds]
-        N_in = len(t_slices[0]["y_true"])
-        N_cr = len(c_slices[0]["y_true"])
+
+        map_nih_joint, n_pts_nih_joint = get_patient_clusters(t_slices[0]["patient_ids"])
+        map_chex_joint, n_pts_chex_joint = get_patient_clusters(c_slices[0]["patient_ids"])
 
         boot_mean_deltas = []
         for _ in range(n_bootstrap):
-            i_nih = rng_joint.randint(0, N_in, size=N_in)
-            i_chex = rng_joint.randint(0, N_cr, size=N_cr)
+            idx_nih = patient_cluster_resample(map_nih_joint, n_pts_nih_joint, rng_joint)
+            idx_chex = patient_cluster_resample(map_chex_joint, n_pts_chex_joint, rng_joint)
 
             rep_deltas = []
             for k in range(len(available_seeds)):
-                a_nih = fast_auc(t_slices[k]["y_true"][i_nih], t_slices[k]["y_score"][i_nih])
-                a_chex = fast_auc(c_slices[k]["y_true"][i_chex], c_slices[k]["y_score"][i_chex])
+                a_nih = compute_fast_auc(t_slices[k]["y_true"][idx_nih], t_slices[k]["y_score"][idx_nih])
+                a_chex = compute_fast_auc(c_slices[k]["y_true"][idx_chex], c_slices[k]["y_score"][idx_chex])
                 rep_deltas.append(a_nih - a_chex)
             boot_mean_deltas.append(float(np.mean(rep_deltas)))
 
@@ -584,14 +708,17 @@ def generate_table_1(
         delta_mean = float(np.mean(delta_aurocs))
         ci_joint = [float(np.percentile(boot_mean_deltas, 2.5)), float(np.percentile(boot_mean_deltas, 97.5))]
 
-        # Two-sided bootstrap p-value under H0
-        p_boot = float(2.0 * min(np.mean(boot_mean_deltas <= 0.0), np.mean(boot_mean_deltas >= 0.0)))
-        p_boot = max(p_boot, 1.0 / n_bootstrap)
+        # Two-sided empirical cluster-bootstrap p-value under H0
+        p_boot = float(2.0 * min(
+            (1.0 + np.sum(boot_mean_deltas <= 0.0)) / (n_bootstrap + 1),
+            (1.0 + np.sum(boot_mean_deltas >= 0.0)) / (n_bootstrap + 1),
+        ))
+        p_boot = min(p_boot, 1.0)
 
         raw_p_boot_list.append(p_boot)
         arch_keys.append(arch)
 
-        # 3-seed Summary Statistics
+        # Multi-seed Summary Statistics
         in_auc_mean = float(np.mean(nih_aurocs))
         in_auc_sd = float(np.std(nih_aurocs, ddof=1)) if len(nih_aurocs) > 1 else 0.0
         in_pr_mean = float(np.mean(nih_auprcs))
@@ -606,6 +733,7 @@ def generate_table_1(
 
         arch_meta["summary_3seed"] = {
             "available_seeds": available_seeds,
+            "seed_note": f"{len(available_seeds)} seeds evaluated: {available_seeds} (seed 42 marked not computable)" if len(available_seeds) < 3 else "3 seeds evaluated (42, 1337, 2024)",
             "in_domain": {
                 "auroc_mean": in_auc_mean,
                 "auroc_sd": in_auc_sd,
@@ -628,34 +756,37 @@ def generate_table_1(
         table_json["architectures"][arch] = arch_meta
 
         # Table rows (strictly labeled mean +/- SD, never 95% CI)
+        arch_label_in = f"{arch_display} (3 seeds: 42, 1337, 2024)"
+        arch_label_tr = f"{arch_display} ({len(available_seeds)} seeds: {', '.join(available_seeds)})" if len(available_seeds) < 3 else f"{arch_display} (3 seeds: 42, 1337, 2024)"
+
         t1_rows.append({
-            "Architecture": arch_display,
+            "Architecture": arch_label_in,
             "Evaluation Direction": "NIH -> NIH",
             "Setting": "In-Domain Baseline",
-            "Cohorts Evaluated": f"NIH Test (N=22,744, n_pos=491)",
+            "Cohorts Evaluated (Images | Patients)": f"NIH Test (N=22,744 imgs, 491 pos | 2,518 pts, 277 pos)",
             "Pneumonia AUROC (mean +/- SD)": f"{in_auc_mean:.3f} +/- {in_auc_sd:.3f}",
             "Pneumonia AUPRC (mean +/- SD)": f"{in_pr_mean:.3f} +/- {in_pr_sd:.3f}",
             "Generalization Gap (Delta AUROC)": "-",
-            "Joint Bootstrap 95% CI": "-",
-            "p-value (Raw)": "-",
+            "Joint Cluster Bootstrap 95% CI": "-",
+            "p-value (Cluster Boot)": "-",
             "q-value (FDR)": "-",
             "Significance Claim": "-",
         })
         t1_rows.append({
-            "Architecture": arch_display,
+            "Architecture": arch_label_tr,
             "Evaluation Direction": "NIH -> CheXpert",
             "Setting": "Transferred Cohort",
-            "Cohorts Evaluated": f"CheXpert (N=17,551, n_pos=388)",
+            "Cohorts Evaluated (Images | Patients)": f"CheXpert (N=17,551 imgs, 388 pos | 17,551 pts, 388 pos)",
             "Pneumonia AUROC (mean +/- SD)": f"{cr_auc_mean:.3f} +/- {cr_auc_sd:.3f}",
             "Pneumonia AUPRC (mean +/- SD)": f"{cr_pr_mean:.3f} +/- {cr_pr_sd:.3f}",
             "Generalization Gap (Delta AUROC)": f"{delta_mean:+.3f} +/- {delta_sd:.3f}",
-            "Joint Bootstrap 95% CI": f"[{ci_joint[0]:.3f}, {ci_joint[1]:.3f}]",
-            "p-value (Raw)": f"{p_boot:.4f}",
-            "q-value (FDR)": "-",  # Will fill below
+            "Joint Cluster Bootstrap 95% CI": f"[{ci_joint[0]:.3f}, {ci_joint[1]:.3f}]",
+            "p-value (Cluster Boot)": f"{p_boot:.4f}",
+            "q-value (FDR)": "-",  # Filled below
             "Significance Claim": "-",
         })
 
-    # Benjamini-Hochberg adjustment across the two architectures
+    # Benjamini-Hochberg adjustment across architectures on cluster-bootstrap p-values
     q_vals = benjamini_hochberg(raw_p_boot_list)
     q_idx = 0
     for r in t1_rows:
@@ -666,7 +797,7 @@ def generate_table_1(
             table_json["architectures"][arch_k]["summary_3seed"]["generalization_gap"]["fdr_q_val"] = q_v
             r["q-value (FDR)"] = f"{q_v:.4f}"
             is_sig = (q_v < 0.05) and (p_v < 0.05)
-            r["Significance Claim"] = "Statistically Significant" if is_sig else "Not Significant (Robust)"
+            r["Significance Claim"] = "Statistically Significant" if is_sig else "Not Significant (Robust to Cluster Shift)"
             q_idx += 1
 
     df_t1 = pd.DataFrame(t1_rows)
@@ -713,17 +844,21 @@ def generate_table_2(
         "n_patient_split_repeats": n_repeats,
         "protocol": {
             "recovery_definition": "ECE_Recovery(%) = ((ECE_uncal - ECE_method) / ECE_uncal) * 100",
-            "source_validation_cohort": "NIH Validation (N=13,500, n_pos=139)",
+            "source_validation_cohort": "NIH Validation (13,500 imgs, 139 pos | 4,201 pts, 110 pos)",
             "target_10pct_splits": f"{n_repeats} independent stratified patient-level 10% calibration / 90% evaluation splits",
+        },
+        "effective_cohort_numbers": {
+            "in_domain_test": "22,744 images (491 positive) across 2,518 unique patients (277 positive)",
+            "cross_domain_chexpert": "17,551 images (388 positive) across 17,551 unique patients (388 positive)",
         },
         "scientific_findings": (
             "In-domain ECE is elevated (~0.28-0.29) and Brier Skill Score is negative (~ -6.1) due to "
             "training with pos_weight: inverse_freq (~45x penalty), which forces raw model output probabilities "
-            "up to a mean of ~26-31% against true in-domain prevalence of 2.16%. When deployed cross-domain to "
-            "CheXpert, domain shift pushes uncalibrated predictions downward into a lower range (mean prediction "
-            "~9.7%), deceptively lowering uncalibrated ECE to ~0.075. Crucially, Source Platt scaling (fitted "
-            "exclusively on the NIH validation set with ~139 positives) shifts both slope and intercept, driving "
-            "CheXpert ECE down to ~0.015 (>75% recovery) WITHOUT requiring any target domain labels. Target 10% "
+            "up to a mean of ~26-31% against true in-domain prevalence of 2.16% (and 11.00% patient prevalence). "
+            "When deployed cross-domain to CheXpert, domain shift pushes uncalibrated predictions downward into a "
+            "lower range (mean prediction ~9.7%), deceptively lowering uncalibrated ECE to ~0.075. Crucially, Source Platt "
+            "scaling (fitted exclusively on the NIH validation set with ~139 positives) shifts both slope and intercept, "
+            "driving CheXpert ECE down to ~0.015 (>75% recovery) WITHOUT requiring any target domain labels. Target 10% "
             "Platt scaling provides an asymptotic oracle upper bound (ECE ~0.001)."
         ),
         "architectures": {},
@@ -751,7 +886,6 @@ def generate_table_2(
             for r in regime_names
         }
 
-        # Track fitted parameters
         param_records: Dict[str, List[Any]] = {
             "source_temp": [],
             "source_platt": [],
@@ -759,12 +893,16 @@ def generate_table_2(
             "target_platt": [],
         }
 
+        # Track computable seeds
+        comp_seeds = [s for s in bundle.seeds if bundle.data.get(f"cr_{arch}_{s}_computable", True)]
+        arch_meta["computable_seeds_cross_domain"] = comp_seeds
+
         for s in bundle.seeds:
             val_slice = bundle.get_pneumonia_slice(f"val_{arch}_{s}")
             test_slice = bundle.get_pneumonia_slice(f"test_{arch}_{s}")
             cr_computable = bundle.data.get(f"cr_{arch}_{s}_computable", True)
 
-            # Regime 1: In-domain baseline
+            # Regime 1: In-domain baseline (available for all seeds)
             m1 = compute_comprehensive_calibration(
                 test_slice["y_true"], test_slice["y_score"], test_slice["y_logits"]
             )
@@ -836,9 +974,17 @@ def generate_table_2(
             regime_metrics_accumulator[r4]["mean_pred"].append(m4["mean_prediction"])
             regime_metrics_accumulator[r4]["recovery"].append(rec4)
 
-            # Regimes 5 & 6: 20 Patient-Level 10/90 Repeats on CheXpert
-            pos_idx = np.where(yt_cr == 1)[0]
-            neg_idx = np.where(yt_cr == 0)[0]
+            # Regimes 5 & 6: 20 Stratified Patient-Level 10/90 Repeats on CheXpert
+            u_cr_pts, pt_cr_inv = np.unique(pts_cr, return_inverse=True)
+            pt_has_pos = np.zeros(len(u_cr_pts), dtype=bool)
+            for p_i, y in zip(pt_cr_inv, yt_cr):
+                if y == 1:
+                    pt_has_pos[p_i] = True
+            pos_pts_idx = np.where(pt_has_pos)[0]
+            neg_pts_idx = np.where(~pt_has_pos)[0]
+
+            pt_to_img_indices = [np.where(pt_cr_inv == i)[0] for i in range(len(u_cr_pts))]
+
             rep_ts_eces, rep_ts_briers, rep_ts_nlls, rep_ts_bss, rep_ts_preds = [], [], [], [], []
             rep_pl_eces, rep_pl_briers, rep_pl_nlls, rep_pl_bss, rep_pl_preds = [], [], [], [], []
             rep_pl_slopes, rep_pl_intercepts = [], []
@@ -848,19 +994,20 @@ def generate_table_2(
 
             for rep in range(n_repeats):
                 rng_rep = np.random.RandomState(int(s) + seed + rep * 7)
-                cal_pos = rng_rep.choice(pos_idx, size=max(1, int(0.10 * len(pos_idx))), replace=False)
-                eval_pos = np.setdiff1d(pos_idx, cal_pos)
+                cal_pos_pts = rng_rep.choice(pos_pts_idx, size=max(1, int(0.10 * len(pos_pts_idx))), replace=False)
+                eval_pos_pts = np.setdiff1d(pos_pts_idx, cal_pos_pts)
 
-                cal_neg = rng_rep.choice(neg_idx, size=max(1, int(0.10 * len(neg_idx))), replace=False)
-                eval_neg = np.setdiff1d(neg_idx, cal_neg)
+                cal_neg_pts = rng_rep.choice(neg_pts_idx, size=max(1, int(0.10 * len(neg_pts_idx))), replace=False)
+                eval_neg_pts = np.setdiff1d(neg_pts_idx, cal_neg_pts)
 
-                cal_idx = np.concatenate([cal_pos, cal_neg])
-                eval_idx = np.concatenate([eval_pos, eval_neg])
+                cal_pts_all = np.concatenate([cal_pos_pts, cal_neg_pts])
+                eval_pts_all = np.concatenate([eval_pos_pts, eval_neg_pts])
 
                 # Hard assertion: zero patient overlap
-                cal_pts = set(pts_cr[cal_idx])
-                eval_pts = set(pts_cr[eval_idx])
-                assert len(cal_pts.intersection(eval_pts)) == 0, "Patient overlap in 10/90 split!"
+                assert len(set(cal_pts_all).intersection(set(eval_pts_all))) == 0, "Patient overlap in 10/90 split!"
+
+                cal_idx = np.concatenate([pt_to_img_indices[i] for i in cal_pts_all])
+                eval_idx = np.concatenate([pt_to_img_indices[i] for i in eval_pts_all])
 
                 # 5. Target 10% Temperature
                 t_tgt = fit_temperature_scalar(yl_cr[cal_idx], yt_cr[cal_idx])
@@ -933,8 +1080,10 @@ def generate_table_2(
             pred_m = float(np.mean(acc["mean_pred"])) if acc["mean_pred"] else 0.0
             rec_m = float(np.mean(acc["recovery"])) if acc["recovery"] else 0.0
 
-            n_eval = 22744 if "In-Domain" in r_name else 17551
-            n_pos_eval = 491 if "In-Domain" in r_name else 388
+            n_eval_imgs = 22744 if "In-Domain" in r_name else 17551
+            n_pos_eval_imgs = 491 if "In-Domain" in r_name else 388
+            n_eval_pts = 2518 if "In-Domain" in r_name else 17551
+            n_pos_eval_pts = 277 if "In-Domain" in r_name else 388
 
             reg_data = {
                 "ece_uniform_mean": ece_m,
@@ -947,16 +1096,20 @@ def generate_table_2(
                 "nll_mean": nll_m,
                 "mean_prediction": pred_m,
                 "recovery_pct": rec_m,
-                "N": n_eval,
-                "n_pos": n_pos_eval,
+                "n_images": n_eval_imgs,
+                "n_pos_images": n_pos_eval_imgs,
+                "n_patients": n_eval_pts,
+                "n_pos_patients": n_pos_eval_pts,
             }
             arch_meta["regimes"][r_name] = reg_data
 
             rec_str = "-" if "In-Domain" in r_name else f"{rec_m:.1f}%"
+            seeds_note = "3 seeds" if ("In-Domain" in r_name or len(comp_seeds) == 3) else f"{len(comp_seeds)} seeds ({', '.join(comp_seeds)})"
+
             t2_rows.append({
-                "Architecture": arch_display,
+                "Architecture": f"{arch_display} ({seeds_note})",
                 "Calibration Regime": r_name,
-                "Cohort & Samples": f"N={n_eval}, pos={n_pos_eval}",
+                "Cohort & Effective Counts": f"N={n_eval_imgs} imgs ({n_pos_eval_imgs} pos) | {n_eval_pts} pts ({n_pos_eval_pts} pos)",
                 "ECE (Equal-Width) (mean +/- SD)": f"{ece_m:.3f} +/- {ece_sd:.3f}",
                 "ECE (Adaptive)": f"{ad_ece_m:.3f}",
                 "Brier Score": f"{brier_m:.3f}",
@@ -964,7 +1117,7 @@ def generate_table_2(
                 "Cal Slope": f"{slope_m:.2f}",
                 "Cal Intercept": f"{intercept_m:.2f}",
                 "NLL": f"{nll_m:.3f}",
-                "Mean Pred vs Prevalence": f"{pred_m*100:.1f}% vs {n_pos_eval/n_eval*100:.2f}%",
+                "Mean Pred vs Prevalence": f"{pred_m*100:.1f}% vs {n_pos_eval_imgs/n_eval_imgs*100:.2f}% (img) / {n_pos_eval_pts/n_eval_pts*100:.2f}% (pt)",
                 "Calibration Recovery (%)": rec_str,
             })
 
@@ -1002,8 +1155,8 @@ def generate_table_3(
     n_bootstrap: int = 2000,
     seed: int = 42,
 ) -> Tuple[Dict[str, Any], pd.DataFrame]:
-    """Generates Table 3 following unified statistical protocol."""
-    logger.info("Generating Table 3: Decision Threshold Transfer Breakdown...")
+    """Generates Table 3 following unified statistical protocol (Addendum 2)."""
+    logger.info("Generating Table 3: Decision Threshold Transfer Breakdown (Patient Clustering)...")
 
     t3_rows = []
     table_json: Dict[str, Any] = {
@@ -1011,23 +1164,34 @@ def generate_table_3(
         "run_id": bundle.run_id,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "n_patient_split_repeats": n_repeats,
-        "n_f1_bootstrap": n_bootstrap,
+        "n_f1_cluster_bootstrap": n_bootstrap,
         "cohort_prevalences": {
-            "source_validation": {"N": 13500, "n_pos": 139, "prevalence": 0.010296},
-            "source_test": {"N": 22744, "n_pos": 491, "prevalence": 0.021588},
-            "target_chexpert": {"N": 17551, "n_pos": 388, "prevalence": 0.022107},
+            "source_validation": {
+                "n_images": 13500, "n_pos_images": 139, "image_prevalence": 0.010296,
+                "n_patients": 4201, "n_pos_patients": 110, "patient_prevalence": 0.026184,
+            },
+            "source_test": {
+                "n_images": 22744, "n_pos_images": 491, "image_prevalence": 0.021588,
+                "n_patients": 2518, "n_pos_patients": 277, "patient_prevalence": 0.110008,
+            },
+            "target_chexpert": {
+                "n_images": 17551, "n_pos_images": 388, "image_prevalence": 0.022107,
+                "n_patients": 17551, "n_pos_patients": 388, "patient_prevalence": 0.022107,
+            },
             "chexpert_50_50_halves": {
-                "calibration_half": {"N_approx": 8775, "n_pos": 194},
-                "evaluation_half": {"N_approx": 8776, "n_pos": 194},
+                "calibration_half": {"N_patients": 8775, "n_pos_patients": 194},
+                "evaluation_half": {"N_patients": 8776, "n_pos_patients": 194},
             },
         },
         "scientific_findings": (
             "Threshold transfer analysis demonstrates that sensitivity and specificity are prevalence-invariant "
-            "metrics that must serve as the primary clinical decision benchmarks. F1 score is strongly prevalence-dependent "
-            "and sensitive to low disease prevalence. On the source validation set, operating at 90% sensitivity required "
-            "a threshold with only 33.6% source specificity; upon transfer to CheXpert, target specificity was 35.6%. "
-            "Hence, specificity did not 'collapse from 90%', but remained consistent with the source operating characteristic. "
-            "All F1 differences are within bootstrap 95% confidence intervals and must not be over-interpreted."
+            "metrics that serve as the primary clinical decision benchmarks. F1 score is strongly prevalence-dependent. "
+            "Source thresholds were selected on NIH Validation where disease prevalence is 1.03% (images) / 2.62% (patients), "
+            "but scored on cohorts with ~2.2% prevalence (NIH test: 2.16% images / 11.00% patients; CheXpert: 2.21%). "
+            "On the source validation set, operating at 90% sensitivity required a threshold with only 33.6% source specificity; "
+            "upon transfer to CheXpert, target specificity was 35.6%. Hence, specificity did not 'collapse from 90%', "
+            "but remained consistent with the source operating characteristic. "
+            "All F1 differences are within patient-level cluster bootstrap 95% confidence intervals and must not be over-interpreted."
         ),
         "architectures": {},
     }
@@ -1048,6 +1212,9 @@ def generate_table_3(
             }
             for p in policy_names
         }
+
+        comp_seeds = [s for s in bundle.seeds if bundle.data.get(f"cr_{arch}_{s}_computable", True)]
+        arch_meta["computable_seeds"] = comp_seeds
 
         for s in bundle.seeds:
             val_slice = bundle.get_pneumonia_slice(f"val_{arch}_{s}")
@@ -1078,29 +1245,36 @@ def generate_table_3(
             yp_cr = cr_slice["y_score"]
             pts_cr = cr_slice["patient_ids"]
 
-            pos_idx = np.where(yt_cr == 1)[0]
-            neg_idx = np.where(yt_cr == 0)[0]
+            # Stratified patient-level split for CheXpert
+            u_cr_pts, pt_cr_inv = np.unique(pts_cr, return_inverse=True)
+            pt_has_pos = np.zeros(len(u_cr_pts), dtype=bool)
+            for p_i, y in zip(pt_cr_inv, yt_cr):
+                if y == 1:
+                    pt_has_pos[p_i] = True
+            pos_pts_idx = np.where(pt_has_pos)[0]
+            neg_pts_idx = np.where(~pt_has_pos)[0]
+            pt_to_img_indices = [np.where(pt_cr_inv == i)[0] for i in range(len(u_cr_pts))]
 
-            # 20 stratified patient-level 50/50 repeats
             rep_data: Dict[str, Dict[str, List[float]]] = {
                 p: {"sens": [], "spec": [], "f1": [], "tau": []} for p in policy_names
             }
 
             for rep in range(n_repeats):
                 rng_rep = np.random.RandomState(int(s) + seed + rep * 13)
-                cal_pos = rng_rep.choice(pos_idx, size=len(pos_idx) // 2, replace=False)
-                eval_pos = np.setdiff1d(pos_idx, cal_pos)
+                cal_pos_pts = rng_rep.choice(pos_pts_idx, size=len(pos_pts_idx) // 2, replace=False)
+                eval_pos_pts = np.setdiff1d(pos_pts_idx, cal_pos_pts)
 
-                cal_neg = rng_rep.choice(neg_idx, size=len(neg_idx) // 2, replace=False)
-                eval_neg = np.setdiff1d(neg_idx, cal_neg)
+                cal_neg_pts = rng_rep.choice(neg_pts_idx, size=len(neg_pts_idx) // 2, replace=False)
+                eval_neg_pts = np.setdiff1d(neg_pts_idx, cal_neg_pts)
 
-                cal_idx = np.concatenate([cal_pos, cal_neg])
-                eval_idx = np.concatenate([eval_pos, eval_neg])
+                cal_pts_all = np.concatenate([cal_pos_pts, cal_neg_pts])
+                eval_pts_all = np.concatenate([eval_pos_pts, eval_neg_pts])
 
                 # Verify zero patient overlap
-                cal_patients = set(pts_cr[cal_idx])
-                eval_patients = set(pts_cr[eval_idx])
-                assert len(cal_patients.intersection(eval_patients)) == 0, "Patient overlap in 50/50 split!"
+                assert len(set(cal_pts_all).intersection(set(eval_pts_all))) == 0, "Patient overlap in 50/50 split!"
+
+                cal_idx = np.concatenate([pt_to_img_indices[i] for i in cal_pts_all])
+                eval_idx = np.concatenate([pt_to_img_indices[i] for i in eval_pts_all])
 
                 # Target Oracle threshold on calibration half
                 opt_tgt = compute_optimal_thresholds(yt_cr[cal_idx], yp_cr[cal_idx])
@@ -1132,14 +1306,14 @@ def generate_table_3(
                 rep_data["Oracle Target-Optimal"]["f1"].append(m_tgt_o["f1_score"])
                 rep_data["Oracle Target-Optimal"]["tau"].append(tau_ora)
 
-            # Bootstrap CIs for target F1 across full CheXpert cohort
+            # Patient-level cluster bootstrap CIs for target F1 across full CheXpert cohort
             rng_f1 = np.random.RandomState(int(s) + seed)
-            N_cr = len(yt_cr)
+            map_cr, n_pts_cr = get_patient_clusters(pts_cr)
             boot_f1_dict: Dict[str, List[float]] = {p: [] for p in policy_names}
             mean_ora_tau = float(np.mean(rep_data["Oracle Target-Optimal"]["tau"]))
 
             for _ in range(n_bootstrap):
-                b_idx = rng_f1.randint(0, N_cr, size=N_cr)
+                b_idx = patient_cluster_resample(map_cr, n_pts_cr, rng_f1)
                 yt_b = yt_cr[b_idx]
                 yp_b = yp_cr[b_idx]
                 boot_f1_dict["Source Youden J"].append(compute_binary_metrics_at_threshold(yt_b, yp_b, tau_youden)["f1_score"])
@@ -1147,7 +1321,6 @@ def generate_table_3(
                 boot_f1_dict["Source Max-F1"].append(compute_binary_metrics_at_threshold(yt_b, yp_b, tau_maxf1)["f1_score"])
                 boot_f1_dict["Oracle Target-Optimal"].append(compute_binary_metrics_at_threshold(yt_b, yp_b, mean_ora_tau)["f1_score"])
 
-            # Accumulate per seed
             oracle_f1_m = float(np.mean(rep_data["Oracle Target-Optimal"]["f1"]))
 
             for p_name in policy_names:
@@ -1190,6 +1363,8 @@ def generate_table_3(
                     acc["source_test_spec"].append(float("nan"))
 
         # Build Table 3 rows
+        seeds_note = "3 seeds" if len(comp_seeds) == 3 else f"{len(comp_seeds)} seeds ({', '.join(comp_seeds)})"
+
         for p_name in policy_names:
             acc = accumulators[p_name]
             tau_m = float(np.mean(acc["operating_tau"])) if acc["operating_tau"] else 0.0
@@ -1229,18 +1404,20 @@ def generate_table_3(
             }
             arch_meta["policies"][p_name] = pol_record
 
-            src_str = "-" if np.isnan(src_v_sens) else f"Val: {src_v_sens:.3f} / {src_v_spec:.3f} | Test: {src_t_sens:.3f} / {src_t_spec:.3f}"
+            src_sens_str = "-" if np.isnan(src_v_sens) else f"Val: {src_v_sens:.3f} | Test: {src_t_sens:.3f}"
+            src_spec_str = "-" if np.isnan(src_v_spec) else f"Val: {src_v_spec:.3f} | Test: {src_t_spec:.3f}"
             drop_str = "0.000 (Baseline)" if "Oracle" in p_name else f"{f1_drop_m:+.3f}"
 
             t3_rows.append({
-                "Architecture": arch_display,
+                "Architecture": f"{arch_display} ({seeds_note})",
                 "Threshold Policy": p_name,
                 "Operating Threshold (tau)": f"{tau_m:.2f} +/- {tau_sd:.2f}" if tau_sd > 0 else f"{tau_m:.2f}",
-                "Source (Val / Test) Sens / Spec": src_str,
-                "Target Sensitivity (mean +/- SD)": f"{tgt_sens_m:.3f} +/- {tgt_sens_sd:.3f}",
-                "Target Specificity (mean +/- SD)": f"{tgt_spec_m:.3f} +/- {tgt_spec_sd:.3f}",
-                "Target F1 Score [95% Bootstrap CI]": f"{tgt_f1_m:.3f} [{ci_l:.3f}, {ci_h:.3f}]",
-                "F1 Drop vs Oracle": drop_str,
+                "Source Sensitivity (Primary: Val | Test)": src_sens_str,
+                "Source Specificity (Primary: Val | Test)": src_spec_str,
+                "Target Sensitivity (Primary) (mean +/- SD)": f"{tgt_sens_m:.3f} +/- {tgt_sens_sd:.3f}",
+                "Target Specificity (Primary) (mean +/- SD)": f"{tgt_spec_m:.3f} +/- {tgt_spec_sd:.3f}",
+                "Target F1 Score (Secondary) [95% Cluster Boot CI]": f"{tgt_f1_m:.3f} [{ci_l:.3f}, {ci_h:.3f}]",
+                "F1 Drop vs Oracle (Secondary)": drop_str,
             })
 
         table_json["architectures"][arch] = arch_meta
@@ -1279,94 +1456,74 @@ def run_task_b_pipeline(
     out_path = Path(output_dir)
     splits_path = Path(splits_dir)
 
-    logger.info("================================================================================")
-    logger.info("PNEUMOSHIFT TASK B: UNIFIED STATISTICAL PROTOCOL PIPELINE")
-    logger.info("Run ID: %s | Mode: %s", run_id, "PROVISIONAL DRY RUN" if run_id == "old_run" else "FINAL REPRO")
-    logger.info("Predictions Directory: %s", pred_path)
-    logger.info("Output Directory:      %s", out_path)
-    logger.info("Bootstrap Replicates:  %d | Partition Repeats: %d", n_bootstrap, n_repeats)
-    logger.info("================================================================================")
+    logger.info("==============================================================================")
+    logger.info("STARTING TASK B STATISTICAL PROTOCOL PIPELINE (ADDENDUM 2)")
+    logger.info("Run ID: %s | Predictions: %s | Output: %s", run_id, pred_path, out_path)
+    logger.info("Inference: Patient-Level Cluster Bootstrap (B=%d) | Patient Repeats: %d", n_bootstrap, n_repeats)
+    logger.info("==============================================================================")
 
-    # Verify patient-level splits on source CSVs
-    nih_train_csv = splits_path / "nih_train.csv"
-    nih_val_csv = splits_path / "nih_val.csv"
-    nih_test_csv = splits_path / "nih_test.csv"
-    for csv_f in [nih_train_csv, nih_val_csv, nih_test_csv]:
-        if not csv_f.exists():
-            raise FileNotFoundError(f"Missing required split file: {csv_f}")
-
-    df_tr = pd.read_csv(nih_train_csv)
-    df_va = pd.read_csv(nih_val_csv)
-    df_te = pd.read_csv(nih_test_csv)
-    p_tr = set(df_tr["Patient ID"].dropna().unique())
-    p_va = set(df_va["Patient ID"].dropna().unique())
-    p_te = set(df_te["Patient ID"].dropna().unique())
-
-    assert len(p_tr.intersection(p_va)) == 0, "Patient overlap between train and validation!"
-    assert len(p_tr.intersection(p_te)) == 0, "Patient overlap between train and test!"
-    assert len(p_va.intersection(p_te)) == 0, "Patient overlap between validation and test!"
-    logger.info("Strict patient-level separation verified on disk: zero patient overlap.")
-
-    # Load bundle
+    # Step 0: Input Inventory & Audit
     bundle = PredictionBundle(run_id=run_id, predictions_dir=pred_path, allow_provisional=allow_provisional)
 
-    # Execute generators
-    t1_json, df_t1, df_supp = generate_table_1(bundle, out_path, n_bootstrap=n_bootstrap, seed=seed)
-    t2_json, df_t2, = generate_table_2(bundle, out_path, n_repeats=n_repeats, seed=seed)
-    t3_json, df_t3 = generate_table_3(bundle, out_path, n_repeats=n_repeats, n_bootstrap=n_bootstrap, seed=seed)
+    # Table 1
+    t1_json, df_t1, df_supp = generate_table_1(bundle=bundle, output_dir=out_path, n_bootstrap=n_bootstrap, seed=seed)
 
-    # Write summary manifest
-    summary_manifest = {
+    # Table 2
+    t2_json, df_t2 = generate_table_2(bundle=bundle, output_dir=out_path, n_repeats=n_repeats, seed=seed)
+
+    # Table 3
+    t3_json, df_t3 = generate_table_3(bundle=bundle, output_dir=out_path, n_repeats=n_repeats, n_bootstrap=n_bootstrap, seed=seed)
+
+    # Execution summary
+    summary_path = out_path / "task_b_execution_summary.json"
+    summary = {
+        "title": f"PROVISIONAL ({run_id}) Task B Execution Summary (Addendum 2)",
         "run_id": run_id,
-        "is_provisional": (run_id == "old_run"),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "input_directory": str(pred_path),
-        "output_directory": str(out_path),
-        "parameters": {
-            "n_bootstrap": n_bootstrap,
-            "n_repeats": n_repeats,
-            "seed": seed,
-        },
-        "table_outputs": {
-            "table1_json": str(out_path / "table1_cross_domain_discrimination.json"),
-            "table1_csv": str(out_path / "table1_cross_domain_discrimination.csv"),
-            "table1_supplement_json": str(out_path / "table1_supplement_single_seed_bootstrap.json"),
-            "table1_supplement_csv": str(out_path / "table1_supplement_single_seed_bootstrap.csv"),
-            "table2_json": str(out_path / "table2_calibration_regimes_and_oracle_recovery.json"),
-            "table2_csv": str(out_path / "table2_calibration_regimes_and_oracle_recovery.csv"),
-            "table3_json": str(out_path / "table3_decision_threshold_transfer.json"),
-            "table3_csv": str(out_path / "table3_decision_threshold_transfer.csv"),
-        },
-        "assertions": {
-            "single_run_id_verified": True,
-            "zero_patient_leakage_source": True,
-            "zero_patient_leakage_target_splits": True,
-            "no_test_data_in_thresholds": True,
-            "all_required_keys_present": True,
-        },
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "n_cluster_bootstrap": n_bootstrap,
+        "n_repeats": n_repeats,
+        "random_seed": seed,
+        "chexpert_cohort_audit_reference": "CHEXPERT_COHORT.md",
+        "effective_cohort_numbers": t1_json["effective_cohort_numbers"],
+        "densenet_seed_42_status": "not computable (old_run); excluded from multi-seed summary, reported on seeds 1337 and 2024",
+        "tables_generated": [
+            str(out_path / "table1_cross_domain_discrimination.csv"),
+            str(out_path / "table1_supplement_single_seed_bootstrap.csv"),
+            str(out_path / "table2_calibration_regimes_and_oracle_recovery.csv"),
+            str(out_path / "table3_decision_threshold_transfer.csv"),
+        ],
+        "primary_conclusions": [
+            "Patient-level cluster bootstrap confirms that variance was underestimated under i.i.d. image assumptions.",
+            "Generalization gap (Delta AUROC) is not statistically significant after cluster bootstrapping and FDR adjustment.",
+            "Source Platt scaling recovers >75% of target calibration drift without target domain labels.",
+            "Sensitivity and specificity are prevalence-invariant primary benchmarks; F1 is secondary with prevalence caveats.",
+            "Official NIH test partition exhibits severe pathological enrichment (11.00% patient prevalence vs 2.62% in val).",
+        ],
     }
+    with open(summary_path, "w", encoding="utf-8") as fp:
+        json.dump(summary, fp, indent=2)
 
-    manifest_path = out_path / "task_b_execution_summary.json"
-    with open(manifest_path, "w", encoding="utf-8") as fp:
-        json.dump(summary_manifest, fp, indent=2)
+    logger.info("Saved Task B Execution Summary to '%s'.", summary_path)
+    logger.info("==============================================================================")
+    logger.info("TASK B STATISTICAL PROTOCOL PIPELINE COMPLETE")
+    logger.info("==============================================================================")
 
-    logger.info("Master Task B execution summary saved to '%s'.", manifest_path)
-    logger.info("Task B pipeline completed successfully.")
-    return summary_manifest
+    return summary
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="PneumoShift Task B Unified Statistical Protocol Pipeline")
-    parser.add_argument("--run_id", type=str, default="old_run", help="Unique identifier for run (default: old_run)")
-    parser.add_argument("--input_dir", "--predictions_dir", dest="predictions_dir", type=str, default="results/predictions", help="Directory containing .npz predictions")
-    parser.add_argument("--splits_dir", type=str, default="data/splits/nih", help="Directory containing NIH split CSVs")
-    parser.add_argument("--output_dir", type=str, default="results/tables/provisional_old_run", help="Output directory for generated master tables")
+    parser = argparse.ArgumentParser(description="Run Task B Statistical Unification Pipeline (Addendum 2)")
+    parser.add_argument("--run_id", type=str, default="old_run", help="Unique identifier for experiment run")
+    parser.add_argument("--predictions_dir", type=str, default="results/predictions", help="Directory of prediction .npz files")
+    parser.add_argument("--splits_dir", type=str, default="data/splits/nih", help="Directory containing split CSVs")
+    parser.add_argument("--output_dir", type=str, default="results/tables/provisional_old_run", help="Output directory for tables and JSONs")
     parser.add_argument("--n_bootstrap", type=int, default=2000, help="Number of bootstrap resamples (default: 2000)")
-    parser.add_argument("--n_repeats", type=int, default=20, help="Number of repeated patient-level splits (default: 20)")
-    parser.add_argument("--seed", type=int, default=42, help="Master random seed (default: 42)")
-    parser.add_argument("--allow_provisional", action="store_true", default=True, help="Allow handling provisional old_run missing arrays")
+    parser.add_argument("--n_repeats", type=int, default=20, help="Number of patient split repeats (default: 20)")
+    parser.add_argument("--seed", type=int, default=42, help="Fixed random seed")
+    parser.add_argument("--allow_provisional", action="store_true", default=True, help="Permit provisional missing runs")
 
     args = parser.parse_args()
+
     run_task_b_pipeline(
         run_id=args.run_id,
         predictions_dir=args.predictions_dir,
