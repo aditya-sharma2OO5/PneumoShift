@@ -517,6 +517,12 @@ def main() -> None:
                 )
 
             val_row_order_hash = hashlib.sha256("".join(v_image_ids.astype(str)).encode("utf-8")).hexdigest()
+            ckpt_bytes = best_ckpt_path.read_bytes() if best_ckpt_path.is_file() else b""
+            cur_ckpt_sha = hashlib.sha256(ckpt_bytes).hexdigest() if ckpt_bytes else "unknown"
+            cur_cfg_sha = hashlib.sha256(Path(config_path).read_bytes()).hexdigest() if Path(config_path).is_file() else "unknown"
+            cur_git_commit = get_git_commit()
+            cur_ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
             np.savez_compressed(
                 val_pred_path,
                 y_true=v_targets,
@@ -528,6 +534,15 @@ def main() -> None:
                 label_cols=np.array(label_cols),
                 split_csv_row_order_hash=val_row_order_hash,
                 features=v_feats,
+                generated_by=np.array("train.py"),
+                git_commit=np.array(cur_git_commit),
+                run_id=np.array(run_id),
+                checkpoint_sha256=np.array(cur_ckpt_sha),
+                config_hash=np.array(cur_cfg_sha),
+                dataset_name=np.array(ds_name),
+                row_order_hash=np.array(val_row_order_hash),
+                timestamp=np.array(cur_ts),
+                data_source=np.array("real_inference"),
             )
             shutil.copy2(val_pred_path, seed_run_dir / f"predictions_val_{arch}_{seed}.npz")
             logger.info("Saved source validation prediction arrays (.npz) to %s (row_order_hash: %s)", val_pred_path, val_row_order_hash[:10])
@@ -599,6 +614,15 @@ def main() -> None:
                     label_cols=np.array(label_cols),
                     split_csv_row_order_hash=test_row_order_hash,
                     features=t_feats,
+                    generated_by=np.array("train.py"),
+                    git_commit=np.array(cur_git_commit),
+                    run_id=np.array(run_id),
+                    checkpoint_sha256=np.array(cur_ckpt_sha),
+                    config_hash=np.array(cur_cfg_sha),
+                    dataset_name=np.array(ds_name),
+                    row_order_hash=np.array(test_row_order_hash),
+                    timestamp=np.array(cur_ts),
+                    data_source=np.array("real_inference"),
                 )
                 shutil.copy2(test_pred_path, seed_run_dir / f"predictions_test_{arch}_{seed}.npz")
                 logger.info("Saved source test prediction arrays (.npz) to %s (row_order_hash: %s)", test_pred_path, test_row_order_hash[:10])

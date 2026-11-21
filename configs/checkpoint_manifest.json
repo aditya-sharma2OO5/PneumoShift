@@ -1,0 +1,80 @@
+{
+  "version": "1.0.0",
+  "dataset_origin": "nih_chest_xray",
+  "checkpoints": {
+    "densenet121_42": {
+      "architecture": "densenet121",
+      "seed": 42,
+      "relative_path": "results/runs/nih_densenet121/checkpoints/seed_42/checkpoint_best.pt",
+      "filename": "checkpoint_best.pt",
+      "sha256": "6e77c6a6cc3e10cb5150924dd81ff74c5eb44359466ae2d3f56519c875d23a59",
+      "size_bytes": 84476676,
+      "stored_epoch": 5,
+      "stored_val_pneumonia_auroc": 0.7474244539702419,
+      "stored_val_macro_auroc": 0.8228563435215122
+    },
+    "densenet121_1337": {
+      "architecture": "densenet121",
+      "seed": 1337,
+      "relative_path": "results/runs/nih_densenet121/checkpoints/seed_1337/checkpoint_best.pt",
+      "filename": "checkpoint_best.pt",
+      "sha256": "c3f6afccac87254c980a88ea72c71fb13631364483401cbed5bc8b2052b946a0",
+      "size_bytes": 84476676,
+      "stored_epoch": 1,
+      "stored_val_pneumonia_auroc": 0.7474707607613484,
+      "stored_val_macro_auroc": 0.8130577969715944
+    },
+    "densenet121_2024": {
+      "architecture": "densenet121",
+      "seed": 2024,
+      "relative_path": "results/runs/nih_densenet121/checkpoints/seed_2024/checkpoint_best.pt",
+      "filename": "checkpoint_best.pt",
+      "sha256": "494dd05fd54cd0effdc3393534d99d6a821b2ff93f63bf0c4841493eb0c851c3",
+      "size_bytes": 84476676,
+      "stored_epoch": 1,
+      "stored_val_pneumonia_auroc": 0.7483075137076178,
+      "stored_val_macro_auroc": 0.7990193660537496
+    },
+    "efficientnet_b0_42": {
+      "architecture": "efficientnet_b0",
+      "seed": 42,
+      "relative_path": "results/runs/nih_efficientnet_b0/checkpoints/seed_42/checkpoint_best.pt",
+      "filename": "checkpoint_best.pt",
+      "sha256": "dc2b37375b6909b814830dd57eb384765f5c18ed8fdc34ced349fa48872458bc",
+      "size_bytes": 48702297,
+      "stored_epoch": 5,
+      "stored_val_pneumonia_auroc": 0.7560315941543599,
+      "stored_val_macro_auroc": 0.8288639148268206
+    },
+    "efficientnet_b0_1337": {
+      "architecture": "efficientnet_b0",
+      "seed": 1337,
+      "relative_path": "results/runs/nih_efficientnet_b0/checkpoints/seed_1337/checkpoint_best.pt",
+      "filename": "checkpoint_best.pt",
+      "sha256": "7772e387d3d2b4000825da5e70f858c09ce81862340d1f6199b0d0aad7f958b9",
+      "size_bytes": 48702297,
+      "stored_epoch": 1,
+      "stored_val_pneumonia_auroc": 0.7623411636681225,
+      "stored_val_macro_auroc": 0.8151178770819628
+    },
+    "efficientnet_b0_2024": {
+      "architecture": "efficientnet_b0",
+      "seed": 2024,
+      "relative_path": "results/runs/nih_efficientnet_b0/checkpoints/seed_2024/checkpoint_best.pt",
+      "filename": "checkpoint_best.pt",
+      "sha256": "8d8b6f80892e9854001ac24bfadea81f25703c5d617ea83c24eab9935788815c",
+      "size_bytes": 48702297,
+      "stored_epoch": 1,
+      "stored_val_pneumonia_auroc": 0.7580653238056213,
+      "stored_val_macro_auroc": 0.8076440442318307
+    }
+  },
+  "valid_sha256s": [
+    "6e77c6a6cc3e10cb5150924dd81ff74c5eb44359466ae2d3f56519c875d23a59",
+    "c3f6afccac87254c980a88ea72c71fb13631364483401cbed5bc8b2052b946a0",
+    "494dd05fd54cd0effdc3393534d99d6a821b2ff93f63bf0c4841493eb0c851c3",
+    "dc2b37375b6909b814830dd57eb384765f5c18ed8fdc34ced349fa48872458bc",
+    "7772e387d3d2b4000825da5e70f858c09ce81862340d1f6199b0d0aad7f958b9",
+    "8d8b6f80892e9854001ac24bfadea81f25703c5d617ea83c24eab9935788815c"
+  ]
+}
