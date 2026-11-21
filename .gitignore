@@ -258,6 +258,7 @@ credentials.*
 *.h5
 *.onnx
 *.npz
+!configs/*.npz
 *.npy
 *.zip
 *.tar
@@ -287,6 +288,8 @@ results/quarantine/
 /checkpoint_manifest.json
 
 # Internal Forensic Audit Artifacts
+CLAIMS_TO_REMOVE.md
+MANUSCRIPT_REWRITE_OPTIONS.md
 CHANGELOG_CLAIMS.md
 PROVENANCE_TABLE.csv
 VERIFY_REPORT.md

@@ -22,6 +22,23 @@ from pneumoshift.figures.plotters import (
 )
 
 
+def _has_stamped_cross_domain_predictions() -> bool:
+    pred_dir = Path("results/predictions")
+    if not pred_dir.is_dir():
+        return False
+    cross_files = list(pred_dir.glob("*cross*.npz"))
+    if not cross_files:
+        return False
+    for p in cross_files:
+        try:
+            with np.load(p) as data:
+                if str(data.get("data_source", "")) == "real_inference":
+                    return True
+        except Exception:
+            continue
+    return False
+
+
 def test_apply_publication_theme():
     apply_publication_theme({"font_size_title": 12, "font_size_label": 10})
     assert plt.rcParams["axes.titlesize"] == 12
@@ -55,6 +72,8 @@ def test_plot_fig1_study_overview():
 
 
 def test_plot_fig2_roc_pr_curves():
+    if not _has_stamped_cross_domain_predictions():
+        pytest.skip("No stamped cross-domain predictions exist (pending real CheXpert inference on Kaggle)")
     fig = plot_fig2_roc_pr_curves()
     assert isinstance(fig, plt.Figure)
     assert len(fig.axes) == 2
@@ -65,6 +84,8 @@ def test_plot_fig2_roc_pr_curves():
 
 
 def test_plot_fig3_calibration_reliability():
+    if not _has_stamped_cross_domain_predictions():
+        pytest.skip("No stamped cross-domain predictions exist (pending real CheXpert inference on Kaggle)")
     fig = plot_fig3_calibration_reliability()
     assert isinstance(fig, plt.Figure)
     # 4 main subpanels + 4 inset axes = 8 total axes
@@ -73,6 +94,8 @@ def test_plot_fig3_calibration_reliability():
 
 
 def test_plot_fig4_threshold_transfer_discordance():
+    if not _has_stamped_cross_domain_predictions():
+        pytest.skip("No stamped cross-domain predictions exist (pending real CheXpert inference on Kaggle)")
     fig = plot_fig4_threshold_transfer_discordance()
     assert isinstance(fig, plt.Figure)
     assert len(fig.axes) == 2
@@ -114,6 +137,8 @@ def test_export_figure(tmp_path):
 
 
 def test_generate_all_figures_smoke_test(tmp_path):
+    if not _has_stamped_cross_domain_predictions():
+        pytest.skip("No stamped cross-domain predictions exist (pending real CheXpert inference on Kaggle)")
     results = generate_all_figures(
         output_dir=tmp_path,
         formats=["pdf", "svg", "png"],

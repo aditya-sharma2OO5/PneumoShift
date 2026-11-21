@@ -14,12 +14,34 @@ from pneumoshift.aggregation.collector import (
     validate_manifest_completeness,
 )
 from pneumoshift.utils.io import load_json, save_json
+from pathlib import Path
+import pytest
+
+
+def _has_stamped_cross_domain_predictions() -> bool:
+    pred_dir = Path("results/predictions")
+    if not pred_dir.is_dir():
+        return False
+    cross_files = list(pred_dir.glob("*cross*.npz"))
+    if not cross_files:
+        return False
+    for p in cross_files:
+        try:
+            import numpy as np
+            with np.load(p) as data:
+                if str(data.get("data_source", "")) == "real_inference":
+                    return True
+        except Exception:
+            continue
+    return False
 
 
 class TestResultsCollector:
     """Verifies results discovery, ingestion, normalization, and manifest saving."""
 
     def test_ingest_phase3_existing(self):
+        if not _has_stamped_cross_domain_predictions():
+            pytest.skip("No stamped cross-domain predictions exist (pending real CheXpert inference on Kaggle)")
         res = ingest_phase3_results("results/tables/cross_domain")
         assert res["available"] is True
         assert "nih_to_chexpert" in res["directions"]
@@ -31,6 +53,8 @@ class TestResultsCollector:
         assert res["directions"] == {}
 
     def test_ingest_phase4_existing(self):
+        if not _has_stamped_cross_domain_predictions():
+            pytest.skip("No stamped cross-domain predictions exist (pending real CheXpert inference on Kaggle)")
         res = ingest_phase4_results("results/tables/phase4_ablations")
         assert res["available"] is True
         assert bool(res["master_report"]) or bool(res["architecture_comparison"])

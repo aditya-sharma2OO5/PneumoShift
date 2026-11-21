@@ -152,3 +152,83 @@ def test_inference_sharding_and_resume_logic(tmp_path: Path):
             pending_shards.append(s_idx)
 
     assert pending_shards == [1, 2]  # Shard 0 already exists, should resume at 1 and 2
+
+
+def test_four_label_policies(sample_chexpert_csv: Path):
+    """Verifies the exact formulation and prevalence calculations for all 4 pre-registered label policies."""
+    df = pd.read_csv(sample_chexpert_csv)
+    frontal_df = df[df["Frontal/Lateral"].str.upper() == "FRONTAL"].copy().reset_index(drop=True)
+    raw_pneu = frontal_df["Pneumonia"]
+
+    # (a) u_zeros (Primary): blank and uncertain (-1) -> 0
+    y_u_zeros = np.where(raw_pneu == 1.0, 1.0, 0.0).astype(np.float32)
+    assert np.array_equal(y_u_zeros, np.array([1.0, 0.0, 0.0, 0.0, 1.0], dtype=np.float32))
+
+    # (b) u_ones (Sensitivity 1): uncertain (-1) -> 1, blank -> 0
+    y_u_ones = np.where((raw_pneu == 1.0) | (raw_pneu == -1.0), 1.0, 0.0).astype(np.float32)
+    assert np.array_equal(y_u_ones, np.array([1.0, 1.0, 0.0, 0.0, 1.0], dtype=np.float32))
+
+    # (c) u_excluded (Sensitivity 2): uncertain (-1) excluded, blank kept 0
+    mask_u_excluded = (raw_pneu != -1.0).to_numpy(dtype=bool)
+    assert np.array_equal(mask_u_excluded, np.array([True, False, True, True, True]))
+    assert y_u_zeros[mask_u_excluded].sum() == 2.0
+    assert len(y_u_zeros[mask_u_excluded]) == 4
+
+    # (d) explicitly_labeled_only (Sensitivity 3): both blank (NaN) and uncertain (-1) excluded
+    mask_explicit = ((raw_pneu == 1.0) | (raw_pneu == 0.0)).to_numpy(dtype=bool)
+    assert np.array_equal(mask_explicit, np.array([True, False, False, True, True]))
+    assert len(y_u_zeros[mask_explicit]) == 3
+    assert y_u_zeros[mask_explicit].sum() == 2.0
+
+
+def test_pre_registration_plan_assert():
+    """Verifies that ANALYSIS_PLAN_TRANSFER.md exists and is cryptographically verified."""
+    import hashlib
+    plan_p = Path("ANALYSIS_PLAN_TRANSFER.md")
+    assert plan_p.is_file(), "ANALYSIS_PLAN_TRANSFER.md must exist in repository root!"
+    data = plan_p.read_bytes()
+    sha = hashlib.sha256(data).hexdigest()
+    assert len(sha) == 64
+    assert sha.lower() == "e0943297c9948c40b8f9974ca39d2af88e39babca0f88683ae6217b73c32ff9e"
+
+
+def test_nih_reference_logits_bundle():
+    """Verifies that configs/nih_test_reference_logits.npz contains complete val and test arrays for all 6 models."""
+    ref_p = Path("configs/nih_test_reference_logits.npz")
+    assert ref_p.is_file(), "configs/nih_test_reference_logits.npz must exist!"
+    data = np.load(ref_p)
+
+    models = [
+        "densenet121_42", "densenet121_1337", "densenet121_2024",
+        "efficientnet_b0_42", "efficientnet_b0_1337", "efficientnet_b0_2024"
+    ]
+    for m in models:
+        # Test arrays (22,744)
+        assert f"{m}_test_logits" in data
+        assert data[f"{m}_test_logits"].shape == (22744,)
+        # Val arrays (13,500)
+        assert f"{m}_val_logits" in data
+        assert data[f"{m}_val_logits"].shape == (13500,)
+
+
+def test_hardened_notebook_stages_and_assertions():
+    """Verifies notebook validity, stage controls, single-decode architecture, and gating guards."""
+    nb_p = Path("notebooks/kaggle_infer_old_checkpoints.ipynb")
+    assert nb_p.is_file(), "notebooks/kaggle_infer_old_checkpoints.ipynb must exist!"
+    with open(nb_p, "r", encoding="utf-8") as f:
+        nb = json.load(f)
+
+    assert len(nb["cells"]) == 10, f"Expected 10 cells, got {len(nb['cells'])}"
+    full_text = "".join("".join(c.get("source", [])) for c in nb["cells"])
+
+    assert "prov-hardening-v2" in full_text
+    assert "STAGE =" in full_text
+    assert "NIH_GATE_PASSED.json" in full_text
+    assert "ANALYSIS_PLAN_TRANSFER.md" in full_text
+    assert "u_zeros" in full_text
+    assert "u_ones" in full_text
+    assert "u_excluded" in full_text
+    assert "explicitly_labeled_only" in full_text
+    assert "benchmark_gpu_forward_speed" in full_text
+    assert "torch.cuda.synchronize" in full_text
+
