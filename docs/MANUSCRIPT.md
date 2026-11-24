@@ -16,7 +16,7 @@
 Deep learning systems for automated chest radiograph interpretation frequently claim expert-level diagnostic performance on internal retrospective test sets. However, when deployed across distinct healthcare institutions, models encounter severe distribution shifts driven by variations in patient demographics, radiographic acquisition hardware, institutional disease prevalence, and clinical triage settings. The multidimensional failure modes—encompassing discrimination collapse, probability miscalibration, operating threshold transfer discordance, architectural inductive biases, and post-hoc visual attribution shortcuts—remain insufficiently quantified under rigorous statistical control.
 
 ### Methods
-We established **PneumoShift**, an open, reproducible meta-evaluation framework interrogating model robustness across two of the largest public chest radiograph repositories: the ambulatory outpatient cohort `NIH ChestX-ray14` ($N=112,120$ radiographs, $30,805$ unique patients) and the inpatient/intensive-care cohort `Stanford CheXpert` ($N=224,316$ radiographs, $65,240$ unique patients). Using zero-leakage, patient-partitioned splits, we trained and evaluated densely connected (DenseNet121) and inverted residual (EfficientNet-B0) networks across bidirectional domain shifts (NIH to CheXpert) across three random seeds (42, 1337, 2024). We conducted: (1) multi-seed discrimination benchmarking with independent-sample difference testing; (2) 4-regime probability calibration and Platt recalibration auditing (uncalibrated, source temperature scaled, target Platt recalibrated); and (3) operating decision threshold transfer evaluations using stratified target holdout splits. Multiple hypothesis testing was rigorously controlled via the Benjamini-Hochberg False Discovery Rate (FDR) procedure ($lpha = 0.05$).
+We established **PneumoShift**, an open, reproducible meta-evaluation framework interrogating model robustness across two of the largest public chest radiograph repositories: the ambulatory outpatient cohort `NIH ChestX-ray14` ($N=112,120$ radiographs, $30,805$ unique patients) and the inpatient/intensive-care cohort `Stanford CheXpert` ($N=224,316$ radiographs, $65,240$ unique patients). Using zero-leakage, patient-partitioned splits, we trained and evaluated densely connected (DenseNet121) and inverted residual (EfficientNet-B0) networks across bidirectional domain shifts (NIH to CheXpert) across three random seeds (42, 1337, 2024). We conducted: (1) multi-seed discrimination benchmarking with independent-sample difference testing; (2) 4-regime probability calibration and Platt recalibration auditing (uncalibrated, source temperature scaled, target Platt recalibrated); and (3) operating decision threshold transfer evaluations using stratified target holdout splits. Multiple hypothesis testing was rigorously controlled via the Benjamini-Hochberg False Discovery Rate (FDR) procedure ($\alpha = 0.05$).
 
 ### Findings
 Across three independent training replications, in-domain pneumonia discrimination on the NIH test cohort yielded AUROCs of $0.675$ ($95\%\text{ CI: } [0.621, 0.729]$) for DenseNet121 and $0.683$ ($[0.644, 0.721]$) for EfficientNet-B0. Cross-domain transfer metrics to Stanford CheXpert are [PENDING: real CheXpert inference].
@@ -137,7 +137,7 @@ Binary clinical classification requires thresholding continuous probabilities at
 - **Policy C (Oracle Target-Optimal)**: Cutoff maximizing F1 score directly on target distribution (theoretical upper bound).
 
 ### 3.4 Statistical Inference & Hypothesis Testing
-To account for intra-patient correlation across multiple radiographs from the same individual, all confidence intervals were computed via **non-parametric patient-clustered bootstrapping** ($B=1000$ iterations). In each bootstrap resample $b \in \{1, \dots, B\}$, patients (`patient_id`) were sampled with replacement, and all associated radiographs were drawn as an intact cluster. Confidence bounds were established at empirical percentiles: $[q_{0.025}, q_{0.975}]$.
+To account for intra-patient correlation across multiple radiographs from the same individual, all confidence intervals were computed via **non-parametric patient-clustered bootstrapping** ($B=1000$ iterations for baseline in-domain estimation; $B=2000$ pre-specified for confirmatory transfer inference). In each bootstrap resample $b \in \{1, \dots, B\}$, patients (`patient_id`) were sampled with replacement, and all associated radiographs were drawn as an intact cluster. Confidence bounds were established at empirical percentiles: $[q_{0.025}, q_{0.975}]$.
 
 Multiple statistical comparisons across primary study hypotheses were controlled using the **Benjamini-Hochberg procedure** enforcing a False Discovery Rate (FDR) threshold of $q = 0.05$. Adjusted $q$-values were computed via step-up ranking:
 $$q_{(i)} = \min_{j \ge i} \left( \frac{m \cdot p_{(j)}}{j} \right)$$
@@ -150,18 +150,26 @@ $$q_{(i)} = \min_{j \ge i} \left( \frac{m \cdot p_{(j)}}{j} \right)$$
 Evaluation across independent random initializations (seeds 42, 1337, 2024) established in-domain benchmark performance on the official patient-partitioned NIH ChestX-ray14 test cohort (Table 1). Cross-domain evaluations on Stanford CheXpert are [PENDING: real CheXpert inference].
 
 #### Table 1: Primary Cross-Domain Discrimination & Generalization Gap
-*Patient-clustered non-parametric bootstrap $95\%$ confidence intervals ($B=1000$ resamples) on test cohorts.*
+*Patient-clustered non-parametric bootstrap $95\%$ confidence intervals ($B=1000$ resamples for baseline in-domain estimation; $B=2000$ pre-specified for confirmatory transfer inference) on test cohorts.*
 
 | Architecture | Evaluation Direction | Setting | Pneumonia AUROC [95% CI] | Pneumonia AUPRC [95% CI] | Sens @ 90% Spec | Generalization Gap ($\Delta$ AUROC) | $p$-value (Raw) | $q$-value (FDR) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| DenseNet121 | NIH $ightarrow$ NIH | In-Domain | 0.675 [0.621, 0.729] | [PENDING] | 0.244 | — | — | — |
-| DenseNet121 | NIH $ightarrow$ CheXpert | Transferred | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
-| DenseNet121 | CheXpert $ightarrow$ CheXpert | In-Domain | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | — | — | — |
-| DenseNet121 | CheXpert $ightarrow$ NIH | Transferred | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
-| EfficientNet-B0 | NIH $ightarrow$ NIH | In-Domain | 0.683 [0.644, 0.721] | [PENDING] | 0.254 | — | — | — |
-| EfficientNet-B0 | NIH $ightarrow$ CheXpert | Transferred | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
-| EfficientNet-B0 | CheXpert $ightarrow$ CheXpert | In-Domain | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | — | — | — |
-| EfficientNet-B0 | CheXpert $ightarrow$ NIH | Transferred | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| DenseNet121 | NIH $
+ightarrow$ NIH | In-Domain | 0.675 [0.621, 0.729] | [PENDING] | 0.244 | — | — | — |
+| DenseNet121 | NIH $
+ightarrow$ CheXpert | Transferred | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| DenseNet121 | CheXpert $
+ightarrow$ CheXpert | In-Domain | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | — | — | — |
+| DenseNet121 | CheXpert $
+ightarrow$ NIH | Transferred | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| EfficientNet-B0 | NIH $
+ightarrow$ NIH | In-Domain | 0.683 [0.644, 0.721] | [PENDING] | 0.254 | — | — | — |
+| EfficientNet-B0 | NIH $
+ightarrow$ CheXpert | Transferred | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| EfficientNet-B0 | CheXpert $
+ightarrow$ CheXpert | In-Domain | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | — | — | — |
+| EfficientNet-B0 | CheXpert $
+ightarrow$ NIH | Transferred | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
 
 For models trained on NIH ChestX-ray14, cross-domain transfer metrics, generalization gaps, and reverse transfer evaluations to Stanford CheXpert are [PENDING: real CheXpert inference].
 
@@ -177,14 +185,22 @@ Probability calibration was evaluated across clinical deployment regimes (Table 
 
 | Architecture | Shift Direction | Calibration Regime | ECE (Equal-Width) [95% CI] | ECE (Adaptive) | Brier Score | NLL | Calibration Recovery (%) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| DenseNet121 | NIH $ightarrow$ CheXpert | 1. In-Domain Baseline | 0.292 [0.188, 0.397] | 0.292 | 0.151 | 0.469 | — |
-| DenseNet121 | NIH $ightarrow$ CheXpert | 2. Cross-Domain Uncalibrated | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
-| DenseNet121 | NIH $ightarrow$ CheXpert | 3. Source Temperature Scaled | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
-| DenseNet121 | NIH $ightarrow$ CheXpert | 4. Oracle Recalibrated (10% Target) | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
-| EfficientNet-B0 | NIH $ightarrow$ CheXpert | 1. In-Domain Baseline | 0.282 [0.225, 0.339] | 0.282 | 0.144 | 0.448 | — |
-| EfficientNet-B0 | NIH $ightarrow$ CheXpert | 2. Cross-Domain Uncalibrated | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
-| EfficientNet-B0 | NIH $ightarrow$ CheXpert | 3. Source Temperature Scaled | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
-| EfficientNet-B0 | NIH $ightarrow$ CheXpert | 4. Oracle Recalibrated (10% Target) | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| DenseNet121 | NIH $
+ightarrow$ CheXpert | 1. In-Domain Baseline | 0.292 [0.188, 0.397] | 0.292 | 0.151 | 0.469 | — |
+| DenseNet121 | NIH $
+ightarrow$ CheXpert | 2. Cross-Domain Uncalibrated | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| DenseNet121 | NIH $
+ightarrow$ CheXpert | 3. Source Temperature Scaled | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| DenseNet121 | NIH $
+ightarrow$ CheXpert | 4. Oracle Recalibrated (10% Target) | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| EfficientNet-B0 | NIH $
+ightarrow$ CheXpert | 1. In-Domain Baseline | 0.282 [0.225, 0.339] | 0.282 | 0.144 | 0.448 | — |
+| EfficientNet-B0 | NIH $
+ightarrow$ CheXpert | 2. Cross-Domain Uncalibrated | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| EfficientNet-B0 | NIH $
+ightarrow$ CheXpert | 3. Source Temperature Scaled | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| EfficientNet-B0 | NIH $
+ightarrow$ CheXpert | 4. Oracle Recalibrated (10% Target) | [PENDING: real CheXpert inference] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
 
 In-domain baseline testing revealed high uncalibrated ECE (0.282--0.292) driven by positive-class loss weighting. Cross-domain probability calibration breakdown, source temperature scaling transfer, and target recalibration on Stanford CheXpert are [PENDING: real CheXpert inference].
 
@@ -200,11 +216,11 @@ Evaluating diagnostic cutoffs derived on source data onto target cohorts is summ
 
 | Architecture | Source Domain | Target Domain | Threshold Policy | Operating Threshold ($	au$) | Target Sensitivity | Target Specificity | Target F1 Score | Absolute F1 Drop |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| DenseNet121 | NIH | CheXpert | Source Youden J | 0.24 | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
-| DenseNet121 | NIH | CheXpert | Source Sens-90 | 0.06 | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| DenseNet121 | NIH | CheXpert | Source Youden J | 0.234 ± 0.023 (42: 0.2405, 1337: 0.2073, 2024: 0.2526) | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| DenseNet121 | NIH | CheXpert | Source Sens-90 | 0.102 ± 0.043 (42: 0.0560, 1337: 0.1092, 2024: 0.1400) | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
 | DenseNet121 | NIH | CheXpert | Oracle Target-Optimal | [PENDING] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
-| EfficientNet-B0 | NIH | CheXpert | Source Youden J | 0.24 | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
-| EfficientNet-B0 | NIH | CheXpert | Source Sens-90 | 0.06 | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| EfficientNet-B0 | NIH | CheXpert | Source Youden J | 0.253 ± 0.047 (42: 0.2077, 1337: 0.3015, 2024: 0.2492) | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| EfficientNet-B0 | NIH | CheXpert | Source Sens-90 | 0.094 ± 0.051 (42: 0.0365, 1337: 0.1330, 2024: 0.1122) | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
 | EfficientNet-B0 | NIH | CheXpert | Oracle Target-Optimal | [PENDING] | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
 
 Operating threshold transfer and target diagnostic discordance evaluations are [PENDING: real CheXpert inference].
@@ -226,7 +242,7 @@ The four pre-specified empirical research hypotheses (H1 through H4) evaluated u
 #### Table 4: Consolidated Hypothesis Testing & Significance Summary
 *Formal hypothesis tests with Benjamini-Hochberg False Discovery Rate control ($\alpha=0.05$).*
 
-| Hypothesis ID | Research Question | Null Hypothesis ($H_0$) | Statistical Test | Effect Size / Difference | Raw $p$-value | FDR $q$-value | Significance Verdict ($lpha=0.05$) |
+| Hypothesis ID | Research Question | Null Hypothesis ($H_0$) | Statistical Test | Effect Size / Difference | Raw $p$-value | FDR $q$-value | Significance Verdict ($\alpha=0.05$) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **H1** | Generalization Degradation | $\Delta_{	ext{AUROC}} \le 0$ (in-domain $\le$ cross-domain) | independent_two_sample | [PENDING] | [PENDING] | [PENDING] | [PENDING: real CheXpert inference] |
 | **H2** | Calibration Escalation | $\Delta_{	ext{ECE}} \le 0$ (cross ECE $\le$ in-domain ECE) | paired_bootstrap | [PENDING] | [PENDING] | [PENDING] | [PENDING: real CheXpert inference] |

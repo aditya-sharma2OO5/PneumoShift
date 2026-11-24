@@ -103,7 +103,7 @@ Evaluated on official held-out test splits with patient-clustered 1000-resample 
 | **CheXpert Official Val (5-class)** | — | — | 0.887 | 0.612 | 0.032 | 0.889 (Irvin et al.) | **Aligned** ($\Delta = -0.002$) |
 
 > [!IMPORTANT]
-> **Sanity Bounds Verification**: Both NIH and CheXpert in-domain Pneumonia AUROCs fall comfortably within the pre-registered $[0.65, 0.85]$ sanity bound, confirming that representation learning reproduces published literature standards before cross-dataset domain shifts are induced in Phase 3.
+> **Sanity Bounds Verification**: Both NIH and CheXpert in-domain Pneumonia AUROCs fall comfortably within the pre-specified $[0.65, 0.85]$ sanity bound, confirming that representation learning reproduces published literature standards before cross-dataset domain shifts are induced in Phase 3.
 
 ---
 
