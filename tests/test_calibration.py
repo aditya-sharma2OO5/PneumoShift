@@ -72,3 +72,27 @@ def test_extreme_logits_numerical_stability():
     assert not np.any(np.isinf(p_probs))
 
 
+def test_skewed_predictions_adaptive_vs_uniform_ece():
+    """Verifies that equal-mass (adaptive) and equal-width (uniform) ECE produce distinct values on skewed prediction distributions."""
+    np.random.seed(42)
+    n_samples = 10000
+    # Skewed prediction distribution typical of low-prevalence chest radiograph findings
+    y_pred = np.random.beta(0.5, 10.0, size=n_samples)
+    y_true = (np.random.rand(n_samples) < y_pred).astype(float)
+
+    ece_uniform, _, details_uniform = compute_ece(y_true, y_pred, n_bins=15, strategy="uniform")
+    ece_adaptive, _, details_adaptive = compute_ece(y_true, y_pred, n_bins=15, strategy="adaptive")
+
+    # Both must be valid non-negative numbers
+    assert ece_uniform > 0.0
+    assert ece_adaptive > 0.0
+    # On skewed data, equal-mass and equal-width partitioning must produce distinct ECE values
+    assert abs(ece_uniform - ece_adaptive) > 1e-4
+    # Equal-width binning has a heavily skewed distribution (>50% samples in first bin)
+    assert details_uniform["bin_counts"][0] > n_samples * 0.5
+    # Equal-mass binning distributes samples evenly across bins (~n_samples / n_bins)
+    expected_per_bin = n_samples / 15.0
+    assert np.all(np.abs(details_adaptive["bin_counts"] - expected_per_bin) < 5)
+
+
+

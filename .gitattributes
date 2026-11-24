@@ -1,0 +1,4 @@
+ANALYSIS_PLAN_TRANSFER.md text eol=lf
+notebooks/kaggle_infer_old_checkpoints.ipynb text eol=lf
+configs/checkpoint_manifest.json text eol=lf
+configs/*.npz binary
