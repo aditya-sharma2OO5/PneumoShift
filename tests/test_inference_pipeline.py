@@ -159,7 +159,7 @@ def test_inference_sharding_and_resume_logic(tmp_path: Path):
 
 
 def test_four_label_policies(sample_chexpert_csv: Path):
-    """Verifies the exact formulation and prevalence calculations for all 4 pre-registered label policies."""
+    """Verifies the exact formulation and prevalence calculations for all 4 pre-specified label policies."""
     df = pd.read_csv(sample_chexpert_csv)
     frontal_df = df[df["Frontal/Lateral"].str.upper() == "FRONTAL"].copy().reset_index(drop=True)
     raw_pneu = frontal_df["Pneumonia"]
